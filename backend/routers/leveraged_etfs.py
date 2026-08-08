@@ -30,20 +30,27 @@ def _get_engine():
 
 
 def _format_signal(s) -> dict:
-    """Convert LeveragedETFSignal dataclass to dict for JSON response."""
+    """Convert LeveragedETFSignal dataclass to dict for JSON response.
+
+    FIX v3.3: Updated to match the unified engine's signal fields.
+    Removed quality_score, pattern_score, regime_alignment_score (no longer exist).
+    Added base_swing_score, underlying_score, underlying_ticker.
+    """
     return {
         'ticker': s.ticker,
         'direction': s.direction,
         'underlying': s.underlying,
+        'underlying_ticker': s.underlying_ticker,
         'asset_class': s.asset_class,
         'current_price': s.current_price,
         'composite_score': s.composite_score,
-        'quality_score': s.quality_score,
-        'pattern_score': s.pattern_score,
-        'regime_alignment_score': s.regime_alignment_score,
+        'base_swing_score': s.base_swing_score,
+        'underlying_score': s.underlying_score,
         'decay_risk': s.decay_risk,
         'estimated_daily_decay_pct': s.estimated_daily_decay_pct,
         'volatility_drag_5d_pct': s.volatility_drag_5d_pct,
+        'regime_aligned': s.regime_aligned,
+        'regime_alignment_score': s.regime_alignment_score if hasattr(s, 'regime_alignment_score') else 0,
         'entry_price': s.entry_price,
         'stop_loss': s.stop_loss,
         'target_price': s.target_price,
@@ -55,7 +62,6 @@ def _format_signal(s) -> dict:
         'adx': s.adx,
         'atr_pct': s.atr_pct,
         'rel_volume': s.rel_volume,
-        'regime_aligned': s.regime_aligned,
         'catalyst_warning': s.catalyst_warning,
         'rationale': s.rationale,
     }
@@ -64,25 +70,47 @@ def _format_signal(s) -> dict:
 @router.get('')
 async def screen_leveraged_etfs(
     direction: Optional[str] = Query(None, description='LONG / SHORT / both'),
-    asset_class: Optional[str] = Query(None, description='equity / sector / commodity / rates / thematic'),
+    asset_class: Optional[str] = Query(None, description='single_stock / equity / sector / commodity / rates / thematic'),
     min_score: float = Query(50, ge=0, le=100, description='Minimum composite score'),
     limit: int = Query(20, le=50, description='Max results'),
 ):
-    """Screen the 2x leveraged ETF universe for swing trade candidates.
+    """Screen the 2x leveraged ETF universe using the UNIFIED engine.
 
-    Returns ranked list with decay risk, regime alignment, entry/stop/target,
-    and recommended holding period for each ETF.
-
-    FIX v3.2.2: Lowered default min_score from 60 to 50 (many real candidates
-    score 50-60 in neutral regimes). Also returns regime info + data quality
-    so frontend can show why results may be empty (e.g. regime = sideways
-    means no 2x ETFs are recommended — that's correct, not an error).
+    FIX v3.3: Uses MasterScorer (the same engine that scores regular stocks).
+    For single-stock ETFs (NVDU, SNDG, TSLT, etc.), also scores the underlying
+    stock and blends the two scores.
     """
     try:
         engine = _get_engine()
+        # FIX v3.3: defensive type conversion — handle FastAPI Query objects AND direct calls
+        # FastAPI normally resolves Query to its value, but if called directly it passes the Query object
+        def _resolve(val, default, cast=None):
+            """Extract value from a possibly-Query object."""
+            if val is None:
+                return default
+            if hasattr(val, 'default'):
+                val = val.default
+            if val is None:
+                return default
+            if cast:
+                try:
+                    return cast(val)
+                except (TypeError, ValueError):
+                    return default
+            return val
+
+        direction_val = _resolve(direction, None)
+        asset_class_val = _resolve(asset_class, None)
+        if isinstance(direction_val, str):
+            direction_val = direction_val.upper() if direction_val else None
+        if isinstance(asset_class_val, str):
+            asset_class_val = asset_class_val.lower() if asset_class_val else None
+        min_score_val = _resolve(min_score, 50.0, float)
+        limit_val = _resolve(limit, 20, int)
+
         signals = await asyncio.to_thread(
             engine.screen,
-            direction, asset_class, min_score, limit
+            direction_val, asset_class_val, min_score_val, limit_val
         )
         # Include regime info so frontend can explain why results may be empty
         regime_data = engine.regime.evaluate_regime()
@@ -116,7 +144,10 @@ async def top_long_candidates(limit: int = Query(10, le=20)):
     """Top 2x long ETF swing candidates (regime-permitting)."""
     try:
         engine = _get_engine()
-        signals = await asyncio.to_thread(engine.get_top_long_candidates, limit)
+        # FIX v3.3: handle Query objects
+        limit_val = limit.default if hasattr(limit, 'default') else limit
+        limit_val = int(limit_val) if limit_val is not None else 10
+        signals = await asyncio.to_thread(engine.get_top_long_candidates, limit_val)
         return {'count': len(signals), 'direction': 'LONG', 'signals': [_format_signal(s) for s in signals]}
     except Exception as e:
         logger.error(f"Long candidates error: {e}")
@@ -128,7 +159,9 @@ async def top_short_candidates(limit: int = Query(10, le=20)):
     """Top 2x short ETF swing candidates (regime-permitting)."""
     try:
         engine = _get_engine()
-        signals = await asyncio.to_thread(engine.get_top_short_candidates, limit)
+        limit_val = limit.default if hasattr(limit, 'default') else limit
+        limit_val = int(limit_val) if limit_val is not None else 10
+        signals = await asyncio.to_thread(engine.get_top_short_candidates, limit_val)
         return {'count': len(signals), 'direction': 'SHORT', 'signals': [_format_signal(s) for s in signals]}
     except Exception as e:
         logger.error(f"Short candidates error: {e}")

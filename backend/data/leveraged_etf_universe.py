@@ -1,20 +1,24 @@
 """
-SwingEdge Pro v3 — 2x Leveraged ETF Universe
-Comprehensive list of 2x leveraged long AND short ETFs across all asset classes.
+SwingEdge Pro v3 — 2x Leveraged ETF Universe (Expanded)
+Comprehensive list of 2x leveraged ETFs across all asset classes,
+including the AXS/Direxion/T-REX/GraniteShares/Leverage Shares
+single-stock 2x ETF family (NVDU, TSLT, SNDG, etc.)
 
 CATEGORIES:
+- Single-Stock 2x (NEW v3.3) — tracks ONE underlying stock 2x daily
+  These are what swing traders want for leveraged stock exposure.
+  Examples: SNDG (2x SNDK), NVDU (2x NVDA), TSLT (2x TSLA), AAPU (2x AAPL)
 - Equity Index (broad market)
 - Sector Equity (tech, financials, energy, etc.)
 - International / Regional
 - Commodities (gold, silver, oil, gas)
-- Currencies
 - Rates / Treasuries
-- Thematic (biotech, China, India, etc.)
 
 Each ETF is tagged with:
 - direction: 'LONG' or 'SHORT'
-- underlying: the index/asset it tracks 2x of
-- asset_class: equity / sector / commodity / fx / rates / thematic
+- underlying: the index/asset/stock it tracks 2x of
+- underlying_ticker: for single-stock ETFs, the parent stock ticker
+- asset_class: single_stock / equity / sector / commodity / fx / rates / thematic
 - typical_spread_bps: estimated bid-ask spread (liquidity proxy)
 - decay_risk_base: baseline decay risk for this product (LOW/MEDIUM/HIGH)
 """
@@ -22,6 +26,38 @@ from typing import List, Dict
 
 # ── 2x Leveraged ETF Universe ───────────────────────────────────────────────
 LEVERAGED_ETF_UNIVERSE: List[Dict] = [
+    # ═══════════════════════════════════════════════════════════════════════
+    # SINGLE-STOCK 2x ETFs (NEW v3.3)
+    # These track ONE stock 2x daily — ideal for swing traders who want
+    # leveraged exposure to a specific name without using margin.
+    # US-listed (AXS / Direxion / T-REX / GraniteShares families)
+    # ═══════════════════════════════════════════════════════════════════════
+    {'ticker': 'NVDU', 'direction': 'LONG',  'underlying': 'NVIDIA',         'underlying_ticker': 'NVDA', 'asset_class': 'single_stock', 'typical_spread_bps': 15, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'TSLT', 'direction': 'LONG',  'underlying': 'Tesla',          'underlying_ticker': 'TSLA', 'asset_class': 'single_stock', 'typical_spread_bps': 20, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'AAPU', 'direction': 'LONG',  'underlying': 'Apple',          'underlying_ticker': 'AAPL', 'asset_class': 'single_stock', 'typical_spread_bps': 12, 'decay_risk_base': 'MEDIUM'},
+    {'ticker': 'MSFU', 'direction': 'LONG',  'underlying': 'Microsoft',      'underlying_ticker': 'MSFT', 'asset_class': 'single_stock', 'typical_spread_bps': 12, 'decay_risk_base': 'MEDIUM'},
+    {'ticker': 'AMZU', 'direction': 'LONG',  'underlying': 'Amazon',         'underlying_ticker': 'AMZN', 'asset_class': 'single_stock', 'typical_spread_bps': 15, 'decay_risk_base': 'MEDIUM'},
+    {'ticker': 'METU', 'direction': 'LONG',  'underlying': 'Meta',           'underlying_ticker': 'META', 'asset_class': 'single_stock', 'typical_spread_bps': 15, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'AMDU', 'direction': 'LONG',  'underlying': 'AMD',            'underlying_ticker': 'AMD',  'asset_class': 'single_stock', 'typical_spread_bps': 20, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'NFLU', 'direction': 'LONG',  'underlying': 'Netflix',        'underlying_ticker': 'NFLX', 'asset_class': 'single_stock', 'typical_spread_bps': 20, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'CONL', 'direction': 'LONG',  'underlying': 'Coinbase',       'underlying_ticker': 'COIN', 'asset_class': 'single_stock', 'typical_spread_bps': 30, 'decay_risk_base': 'HIGH'},
+    # US-listed inverse (short) single-stock ETFs
+    {'ticker': 'NVD',  'direction': 'SHORT', 'underlying': 'NVIDIA',         'underlying_ticker': 'NVDA', 'asset_class': 'single_stock', 'typical_spread_bps': 25, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'TSDD', 'direction': 'SHORT', 'underlying': 'Tesla',          'underlying_ticker': 'TSLA', 'asset_class': 'single_stock', 'typical_spread_bps': 25, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'AAPD', 'direction': 'SHORT', 'underlying': 'Apple',          'underlying_ticker': 'AAPL', 'asset_class': 'single_stock', 'typical_spread_bps': 15, 'decay_risk_base': 'MEDIUM'},
+    {'ticker': 'MSFD', 'direction': 'SHORT', 'underlying': 'Microsoft',      'underlying_ticker': 'MSFT', 'asset_class': 'single_stock', 'typical_spread_bps': 15, 'decay_risk_base': 'MEDIUM'},
+    {'ticker': 'AMZD', 'direction': 'SHORT', 'underlying': 'Amazon',         'underlying_ticker': 'AMZN', 'asset_class': 'single_stock', 'typical_spread_bps': 20, 'decay_risk_base': 'MEDIUM'},
+    {'ticker': 'METD', 'direction': 'SHORT', 'underlying': 'Meta',           'underlying_ticker': 'META', 'asset_class': 'single_stock', 'typical_spread_bps': 20, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'AMDD', 'direction': 'SHORT', 'underlying': 'AMD',            'underlying_ticker': 'AMD',  'asset_class': 'single_stock', 'typical_spread_bps': 25, 'decay_risk_base': 'HIGH'},
+    # Leverage Shares family (European-listed, trades in USD on Nasdaq/BTS)
+    # These include names not available as US-listed 2x ETFs
+    {'ticker': 'SNDG', 'direction': 'LONG',  'underlying': 'SanDisk',        'underlying_ticker': 'SNDK', 'asset_class': 'single_stock', 'typical_spread_bps': 30, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'NVDG', 'direction': 'LONG',  'underlying': 'NVIDIA',         'underlying_ticker': 'NVDA', 'asset_class': 'single_stock', 'typical_spread_bps': 25, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'METG', 'direction': 'LONG',  'underlying': 'Meta',           'underlying_ticker': 'META', 'asset_class': 'single_stock', 'typical_spread_bps': 25, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'TSLG', 'direction': 'LONG',  'underlying': 'Tesla',          'underlying_ticker': 'TSLA', 'asset_class': 'single_stock', 'typical_spread_bps': 30, 'decay_risk_base': 'HIGH'},
+    {'ticker': 'AMZG', 'direction': 'LONG',  'underlying': 'Amazon',         'underlying_ticker': 'AMZN', 'asset_class': 'single_stock', 'typical_spread_bps': 25, 'decay_risk_base': 'MEDIUM'},
+    {'ticker': 'AMDG', 'direction': 'LONG',  'underlying': 'AMD',            'underlying_ticker': 'AMD',  'asset_class': 'single_stock', 'typical_spread_bps': 30, 'decay_risk_base': 'HIGH'},
+
     # ═══════════════════════════════════════════════════════════════════════
     # EQUITY INDEX (Broad Market) — most liquid, lowest decay
     # ═══════════════════════════════════════════════════════════════════════
@@ -108,7 +144,7 @@ def get_etf_by_ticker(ticker: str) -> Dict:
 
 
 def get_etfs_by_asset_class(asset_class: str) -> List[Dict]:
-    """Filter by asset class (equity, sector, commodity, fx, rates, thematic)."""
+    """Filter by asset class (single_stock / equity / sector / commodity / rates / thematic)."""
     return [e for e in LEVERAGED_ETF_UNIVERSE if e['asset_class'] == asset_class.lower()]
 
 
@@ -116,3 +152,17 @@ def get_etfs_by_direction(direction: str) -> List[Dict]:
     """Filter by direction ('LONG' or 'SHORT')."""
     direction = direction.upper()
     return [e for e in LEVERAGED_ETF_UNIVERSE if e['direction'] == direction]
+
+
+def get_single_stock_etfs() -> List[Dict]:
+    """Return only single-stock 2x ETFs (NVDU, TSLT, SNDG, etc.)."""
+    return [e for e in LEVERAGED_ETF_UNIVERSE if e['asset_class'] == 'single_stock']
+
+
+def get_etfs_by_underlying(underlying_ticker: str) -> List[Dict]:
+    """Find all leveraged ETFs tracking a specific underlying stock.
+
+    Example: get_etfs_by_underlying('NVDA') returns NVDU (long) and NVD (short).
+    """
+    underlying_ticker = underlying_ticker.upper()
+    return [e for e in LEVERAGED_ETF_UNIVERSE if e.get('underlying_ticker') == underlying_ticker]

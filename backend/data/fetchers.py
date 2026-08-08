@@ -351,9 +351,19 @@ def get_form4_filings(ticker: str) -> List[Dict]:
         hits = data.get('hits', {}).get('hits', [])
         trades = []
         for hit in hits[:20]:
-            src = hit.get('_source', {})
+            src = hit.get('_source', {}) if isinstance(hit, dict) else {}
             display_names = src.get('display_names', [])
-            entity_name = display_names[0].get('name', 'Unknown') if display_names else 'Unknown'
+            # FIX v3.3: display_names entries may be strings OR dicts — handle both
+            if display_names:
+                first = display_names[0]
+                if isinstance(first, dict):
+                    entity_name = first.get('name', 'Unknown')
+                elif isinstance(first, str):
+                    entity_name = first
+                else:
+                    entity_name = 'Unknown'
+            else:
+                entity_name = 'Unknown'
             filed = src.get('file_date', '')
             filing_url = src.get('_source_url') or src.get('url')
 

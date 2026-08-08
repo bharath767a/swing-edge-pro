@@ -3,7 +3,7 @@ SwingEdge Pro — Insider Trading Intelligence
 Tracks Form 4 SEC filings and scores insider sentiment.
 """
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from backend.data.fetchers import get_finnhub_insider_trades, get_form4_filings
 

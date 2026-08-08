@@ -113,6 +113,8 @@ class MicrostructureEngine:
         - Recent Earnings Anchored VWAP (AVWAP)
         - Volume Profile Point of Control (POC)
         - Triple Confluence Score (0-100)
+
+        FIX v3.3: Normalizes column names to Title-case (some callers pass lowercase).
         """
         if df.empty or len(df) < 10:
             return {
@@ -123,7 +125,31 @@ class MicrostructureEngine:
                 'confluence_status': 'NEUTRAL',
                 'hvn_levels': []
             }
-        
+
+        # FIX v3.3: normalize column names to Title-case (microstructure expects Title-case)
+        col_map = {}
+        for c in df.columns:
+            cl = c.lower()
+            if cl == 'open': col_map[c] = 'Open'
+            elif cl == 'high': col_map[c] = 'High'
+            elif cl == 'low': col_map[c] = 'Low'
+            elif cl == 'close': col_map[c] = 'Close'
+            elif cl == 'volume': col_map[c] = 'Volume'
+        df = df.rename(columns=col_map)
+
+        # Verify required columns exist
+        for required in ('Close', 'High', 'Low', 'Volume'):
+            if required not in df.columns:
+                return {
+                    'avwap_earnings': 0.0,
+                    'avwap_dist_pct': 0.0,
+                    'poc_price': 0.0,
+                    'confluence_score': 50.0,
+                    'confluence_status': 'NEUTRAL',
+                    'hvn_levels': [],
+                    'error': f'Missing required column: {required}'
+                }
+
         current_price = float(df['Close'].iloc[-1])
         
         # Detect recent gap/earnings anchor bar (highest volume bar in last 60 days)

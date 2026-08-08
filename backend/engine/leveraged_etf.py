@@ -1,32 +1,36 @@
 """
-SwingEdge Pro v3 — 2x Leveraged ETF Swing Engine
-NEW INTELLIGENCE: Identifies quality, high-probability 2x long/short ETF swing trades.
+SwingEdge Pro v3.3 — Unified Leveraged ETF Swing Engine
+FIX v3.3: This is NO LONGER a separate engine. It is a thin adapter that uses
+the MasterScorer (the SAME engine that scores regular stocks) and adds
+leveraged-ETF-specific logic on top:
 
-WHY THIS IS A SEPARATE MODULE FROM THE MAIN SCORER:
-2x leveraged ETFs have unique risks that vanilla swing scoring misses:
-1. **Volatility decay (beta slippage)** — in choppy markets, 2x ETFs bleed value daily
-   even if the underlying is flat. Example: if underlying goes +5% then -5%, a 2x ETF
-   goes +10% then -10% = net -1% (vs underlying's -0.25%).
-2. **Regime dependency** — 2x longs only work in clean uptrends; 2x shorts only in
-   clean downtrends. Sideways markets = guaranteed decay loss.
-3. **Holding period cap** — 2x ETFs should rarely be held >15 trading days. Decay
-   compounds the longer you hold.
-4. **Catalyst avoidance** — must avoid FOMC, CPI, major earnings (volatility spikes
-   = decay accelerates).
+1. Calls MasterScorer.score_stock() — gets the real composite score using
+   the SAME technicals/fundamentals/sentiment/insider/microstructure/regime
+   analysis that regular stocks get.
 
-ENGINE OUTPUTS:
-- Per-ETF swing quality score (0-100) with regime alignment
-- Volatility decay risk rating (LOW/MEDIUM/HIGH) + estimated daily decay %
-- ATR-based entry/stop/target with 1.5x multiplier (wider for 2x vol)
-- Recommended holding period (5-15 days)
-- Catalyst warnings (upcoming Fed dates, earnings)
-- Direction bias (LONG candidate / SHORT candidate / NEUTRAL — avoid)
+2. For single-stock 2x ETFs (NVDU, TSLT, SNDG, AAPU, etc.) — also scores the
+   UNDERLYING stock (NVDA, TSLA, SNDK, AAPL) and uses that as the primary signal.
+   The ETF is a derivative of the underlying, so the underlying's score matters more.
+
+3. Adds leveraged-ETF-specific risk layers:
+   - Volatility decay model (daily decay = 0.5 × daily_vol² × 100)
+   - Regime alignment filter (longs only in bull, shorts only in bear)
+   - Wider ATR stops (2.5x vs 2.0x)
+   - Holding period cap (5-15 days)
+   - Liquidity floor
+   - Catalyst warnings
+
+WHY ONE ENGINE, NOT TWO:
+The user is right — having two separate engines was a design mistake. ETFs are
+just instruments with extra decay risk. The swing scoring logic (technicals,
+fundamentals, sentiment, etc.) should be IDENTICAL whether you're scoring NVDA
+or NVDU. This adapter pattern ensures that.
 
 Usage:
     from backend.engine.leveraged_etf import LeveragedETFEngine
     engine = LeveragedETFEngine()
-    candidates = engine.screen()  # returns ranked list
-    # top candidate = candidates[0]
+    candidates = engine.screen()
+    # Top candidate = candidates[0]
 """
 import logging
 import numpy as np
@@ -34,39 +38,43 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from backend.data.fetchers import get_ohlcv
-from backend.data.leveraged_etf_universe import LEVERAGED_ETF_UNIVERSE
+from backend.data.fetchers import get_ohlcv, get_stock_info
+from backend.data.leveraged_etf_universe import LEVERAGED_ETF_UNIVERSE, get_etf_by_ticker
 from backend.engine.technicals import TechnicalsEngine
 from backend.engine.market_regime import MarketRegimeClassifier
+from backend.engine.scoring import MasterScorer
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class LeveragedETFSignal:
-    """A ranked 2x leveraged ETF swing trade signal."""
+    """A ranked 2x leveraged ETF swing trade signal (unified engine output)."""
     ticker: str = ''
-    direction: str = 'LONG'              # LONG / SHORT / NEUTRAL
+    direction: str = 'LONG'
     underlying: str = ''
+    underlying_ticker: str = ''      # for single-stock ETFs
     asset_class: str = ''
     current_price: float = 0.0
-    # Scores
-    composite_score: float = 0.0         # 0-100, higher = better swing setup
-    quality_score: float = 0.0           # trend + liquidity + spread
-    pattern_score: float = 0.0           # VCP/EP/BullFlag detection
-    regime_alignment_score: float = 0.0  # is the regime right for this direction?
-    # Risk metrics unique to leveraged ETFs
-    decay_risk: str = 'MEDIUM'           # LOW / MEDIUM / HIGH
+    # Unified score (from MasterScorer — same engine as regular stocks)
+    composite_score: float = 0.0     # 0-100, final score including ETF adjustments
+    base_swing_score: float = 0.0    # raw MasterScorer score before ETF adjustments
+    underlying_score: float = 0.0    # for single-stock ETFs: score of the underlying
+    # ETF-specific risk metrics
+    decay_risk: str = 'MEDIUM'
     estimated_daily_decay_pct: float = 0.0
-    volatility_drag_5d_pct: float = 0.0  # how much decay over 5-day hold
+    volatility_drag_5d_pct: float = 0.0
+    regime_aligned: bool = False
+    regime_alignment_score: float = 0.0
     # Trade setup
     entry_price: float = 0.0
     stop_loss: float = 0.0
     target_price: float = 0.0
     risk_reward: float = 0.0
     recommended_hold_days: int = 10
-    # Pattern + technicals
+    # Technicals (from unified engine)
     pattern: str = 'none'
     trend: str = 'neutral'
     rsi: float = 50.0
@@ -74,60 +82,52 @@ class LeveragedETFSignal:
     atr_pct: float = 0.0
     rel_volume: float = 1.0
     # Risk flags
-    regime_aligned: bool = False
     catalyst_warning: str = ''
-    # Human-readable explanation
+    # Human-readable
     rationale: str = ''
 
 
 class LeveragedETFEngine:
-    """Swing screener specialized for 2x leveraged ETFs.
+    """Unified leveraged ETF swing screener — uses MasterScorer under the hood.
 
-    KEY DIFFERENCES vs MasterScorer:
-    - Strict regime filter: 2x longs only in BULLISH_EXPANSION / CAUTIOUS_BULL;
-      2x shorts only in HIGH_VOLATILITY_DEFENSIVE
-    - Decay-aware scoring: penalizes ETFs with high recent volatility (more decay)
-    - Wider ATR stops: 2.5x ATR (vs 2.0x for non-leveraged) due to 2x vol
-    - Holding period cap: 5-15 trading days max
-    - Catalyst avoidance: flags upcoming FOMC/CPI dates
-    - Liquidity filter: requires avg volume > 500K (else spreads eat the edge)
+    KEY DESIGN (v3.3): ONE engine, not two. The MasterScorer handles all the
+    swing analysis (technicals, fundamentals, sentiment, etc.). This class
+    is a thin adapter that:
+    1. Calls MasterScorer for the base score
+    2. For single-stock ETFs, also scores the underlying stock
+    3. Adds ETF-specific decay/regime/liquidity filters
+    4. Returns the adjusted signal
     """
 
-    # Screening thresholds
-    MIN_AVG_VOLUME = 100_000             # liquidity floor (lowered from 500K — many real 2x ETFs have 100-500K)
-    MIN_ADX_FOR_TREND = 22               # below this = no clean trend = skip
-    MAX_RSI_OVERBOUGHT_LONG = 78         # don't chase 2x longs at extreme overbought
-    MIN_RSI_FOR_SHORT = 50               # short setups need RSI < 50
-    # Parallel screening
-    MAX_WORKERS = 10                     # parallel ETF analysis threads
-    PER_ETF_TIMEOUT_SEC = 8              # max seconds per ETF before giving up
-    # Decay model — calibrated to typical 2x ETF behavior
-    # Daily decay ≈ 0.5 * (daily_vol)^2 * 100 (in %)
-    # At 1.5% daily vol (high-vol ETF): 0.5 * 0.0225 * 100 = 0.11%/day = 0.55%/5days
+    # ETF-specific thresholds
+    MIN_AVG_VOLUME = 50_000          # lowered for single-stock ETFs (some are new/illiquid)
+    MAX_WORKERS = 10
+    PER_ETF_TIMEOUT_SEC = 12
+    # Decay model
     DECAY_COEFFICIENT = 0.5
-    # ATR multipliers (wider for 2x vol)
+    # Wider stops for 2x vol
     STOP_LOSS_ATR_MULT = 2.5
-    TARGET_ATR_MULT = 5.0                # 2:1 R:R minimum
+    TARGET_ATR_MULT = 5.0            # 2:1 R:R minimum
     # Holding period
-    MIN_HOLD_DAYS = 5
+    MIN_HOLD_DAYS = 3
     MAX_HOLD_DAYS = 15
 
     def __init__(self):
         self.tech = TechnicalsEngine()
         self.regime = MarketRegimeClassifier()
+        self.scorer = MasterScorer()  # THE unified engine
 
     def screen(self, direction_filter: Optional[str] = None,
                asset_class_filter: Optional[str] = None,
-               min_score: float = 60.0,
+               min_score: float = 50.0,
                limit: int = 20) -> List[LeveragedETFSignal]:
-        """Screen the entire 2x leveraged ETF universe for swing candidates.
+        """Screen the entire 2x leveraged ETF universe using the unified engine.
 
-        FIX v3.2.2: Now runs ETF analysis in parallel (10 workers) to avoid
-        frontend timeout. Was sequential (~42s for 42 ETFs), now ~5s.
-        Also returns partial results if some ETFs fail — does not crash the
-        entire endpoint.
+        FIX v3.2.2 + v3.3: Parallel execution + uses MasterScorer (was separate).
         """
-        from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeout
+        # Normalize filters (handle None / empty / FastAPI Query objects)
+        direction_filter = self._normalize_filter(direction_filter)
+        asset_class_filter = self._normalize_filter(asset_class_filter)
 
         # Get regime once (cached globally)
         regime_data = self.regime.evaluate_regime()
@@ -135,37 +135,42 @@ class LeveragedETFEngine:
         # Filter universe
         universe = LEVERAGED_ETF_UNIVERSE
         if direction_filter:
-            universe = [e for e in universe if e['direction'] == direction_filter.upper()]
+            universe = [e for e in universe if e['direction'] == direction_filter]
         if asset_class_filter:
-            universe = [e for e in universe if e['asset_class'] == asset_class_filter.lower()]
+            universe = [e for e in universe if e['asset_class'] == asset_class_filter]
 
         signals: List[LeveragedETFSignal] = []
-        errors: List[str] = []
 
-        # FIX: parallel execution with thread pool
+        # Parallel execution
         with ThreadPoolExecutor(max_workers=self.MAX_WORKERS) as executor:
             future_to_etf = {
                 executor.submit(self._analyze_etf_safe, etf_meta, regime_data): etf_meta
                 for etf_meta in universe
             }
-            for future in as_completed(future_to_etf, timeout=30):
+            for future in as_completed(future_to_etf, timeout=60):
                 etf_meta = future_to_etf[future]
                 try:
                     signal = future.result(timeout=self.PER_ETF_TIMEOUT_SEC)
                     if signal and signal.composite_score >= min_score:
                         signals.append(signal)
-                except FuturesTimeout:
-                    errors.append(f"{etf_meta['ticker']}: timeout")
-                    logger.warning(f"ETF analysis timeout: {etf_meta['ticker']}")
                 except Exception as e:
-                    errors.append(f"{etf_meta['ticker']}: {e}")
-                    logger.debug(f"ETF analyze failed {etf_meta['ticker']}: {e}")
+                    logger.warning(f"ETF analyze failed {etf_meta.get('ticker')}: {e}")
 
         signals.sort(key=lambda s: s.composite_score, reverse=True)
         return signals[:limit]
 
+    def _normalize_filter(self, val) -> Optional[str]:
+        """Normalize a filter value — handles None, empty string, FastAPI Query objects."""
+        if val is None:
+            return None
+        # FastAPI Query objects — extract the default
+        if hasattr(val, 'default'):
+            val = val.default
+        val = str(val).strip().upper() if val else ''
+        return val if val else None
+
     def _analyze_etf_safe(self, etf_meta: Dict, regime_data: Dict) -> Optional[LeveragedETFSignal]:
-        """Wrapper that catches all exceptions — used by parallel screen."""
+        """Wrapper that catches all exceptions."""
         try:
             return self._analyze_etf(etf_meta, regime_data)
         except Exception as e:
@@ -173,8 +178,7 @@ class LeveragedETFEngine:
             return None
 
     def analyze_ticker(self, ticker: str) -> Optional[LeveragedETFSignal]:
-        """Analyze a single ETF ticker (must be in our universe)."""
-        from backend.data.leveraged_etf_universe import get_etf_by_ticker
+        """Analyze a single ETF ticker using the unified engine."""
         meta = get_etf_by_ticker(ticker)
         if not meta:
             return None
@@ -182,64 +186,60 @@ class LeveragedETFEngine:
         return self._analyze_etf(meta, regime_data)
 
     def _analyze_etf(self, etf_meta: Dict, regime_data: Dict) -> Optional[LeveragedETFSignal]:
-        """Run full analysis on a single 2x leveraged ETF."""
+        """Analyze one ETF using the unified MasterScorer + ETF-specific overlays."""
         ticker = etf_meta['ticker']
         direction = etf_meta['direction']
+        underlying_ticker = etf_meta.get('underlying_ticker', '')
 
         signal = LeveragedETFSignal(
             ticker=ticker,
             direction=direction,
             underlying=etf_meta['underlying'],
+            underlying_ticker=underlying_ticker,
             asset_class=etf_meta['asset_class'],
         )
 
         try:
-            # ── Fetch OHLCV ───────────────────────────────────────────────
+            # ── Step 1: Get ETF's own OHLCV + technicals ──────────────────
             df = get_ohlcv(ticker, period='1y', interval='1d')
-            if df is None or len(df) < 60:
-                return signal  # insufficient data, will be filtered out
+            if df is None or len(df) < 30:
+                signal.rationale = f"Insufficient OHLCV data ({0 if df is None else len(df)} bars)"
+                return signal
 
-            # ── Compute indicators ────────────────────────────────────────
             df = self.tech.calculate_all_indicators(df)
             if df is None or df.empty:
+                signal.rationale = "Indicator calculation failed"
                 return signal
 
             last = df.iloc[-1]
             close = float(last['close'])
             signal.current_price = close
 
-            # ── Liquidity check ───────────────────────────────────────────
-            # FIX v3.2.2: yfinance sometimes returns 0 or very low volume for valid ETFs
-            # (data glitch, not real). Use max of 20-day avg and 50-day avg to be robust.
+            # Liquidity check (lowered for single-stock ETFs)
             avg_vol_20 = float(df['volume'].tail(20).mean())
             avg_vol_50 = float(df['volume'].tail(50).mean())
             avg_vol = max(avg_vol_20, avg_vol_50) if avg_vol_50 > 0 else avg_vol_20
-            # Only skip if BOTH averages are below threshold (likely real illiquidity)
             if avg_vol_20 < self.MIN_AVG_VOLUME and avg_vol_50 < self.MIN_AVG_VOLUME:
                 signal.rationale = f"Skipped: low liquidity (avg vol {avg_vol:,.0f} < {self.MIN_AVG_VOLUME:,})"
-                signal.composite_score = 0
                 return signal
             signal.rel_volume = round(float(last['volume']) / max(avg_vol, 1), 2) if avg_vol > 0 else 1.0
 
-            # ── Technicals ────────────────────────────────────────────────
+            # ── Step 2: Compute ETF's technicals (from unified engine) ─────
             signal.rsi = round(float(last.get('rsi', 50) or 50), 1)
             signal.adx = round(float(last.get('adx', 20) or 20), 1)
             signal.atr_pct = round(float(last.get('atr', 0) or 0) / close * 100, 2) if close > 0 else 0
             signal.pattern = self._detect_pattern(df, direction)
             signal.trend = self._determine_trend(last)
 
-            # ── Volatility decay model ────────────────────────────────────
-            # Daily returns std → estimated daily decay %
+            # ── Step 3: Volatility decay model ─────────────────────────────
             daily_returns = df['close'].pct_change().dropna().tail(20)
             daily_vol = float(daily_returns.std()) if len(daily_returns) > 5 else 0.02
             signal.estimated_daily_decay_pct = round(
                 self.DECAY_COEFFICIENT * (daily_vol ** 2) * 100, 4
             )
-            # 5-day drag estimate (compounded)
             signal.volatility_drag_5d_pct = round(
                 (1 - (1 - signal.estimated_daily_decay_pct / 100) ** 5) * 100, 3
             )
-            # Decay risk rating
             if signal.estimated_daily_decay_pct < 0.05:
                 signal.decay_risk = 'LOW'
             elif signal.estimated_daily_decay_pct < 0.15:
@@ -247,51 +247,71 @@ class LeveragedETFEngine:
             else:
                 signal.decay_risk = 'HIGH'
 
-            # ── Regime alignment (CRITICAL for leveraged ETFs) ────────────
+            # ── Step 4: BASE swing score ───────────────────────────────────
+            # FIX v3.3: Use the SAME MasterScorer as regular stocks
+            # For ETFs with no fundamentals (index ETFs), the scorer returns a
+            # base 50 — that's fine, the technicals dominate for ETFs anyway.
+            try:
+                base_score = self._compute_base_score(signal, df, ticker, etf_meta)
+                signal.base_swing_score = base_score
+            except Exception as e:
+                logger.debug(f"Base score failed for {ticker}: {e}")
+                base_score = 50.0
+                signal.base_swing_score = 50.0
+
+            # ── Step 5: For single-stock ETFs, also score the UNDERLYING ──
+            # This is the key insight: SNDG tracks SNDK 2x. If SNDK has a great
+            # setup, SNDG will reflect it (2x). The underlying's score matters more.
+            if underlying_ticker:
+                try:
+                    underlying_score = self._score_underlying(underlying_ticker)
+                    signal.underlying_score = underlying_score
+                    # Blend: underlying matters MORE than the ETF's own technicals
+                    # because the ETF is a derivative
+                    base_score = (underlying_score * 0.65) + (base_score * 0.35)
+                except Exception as e:
+                    logger.debug(f"Underlying score failed for {underlying_ticker}: {e}")
+                    signal.underlying_score = 50.0
+
+            # ── Step 6: Regime alignment ───────────────────────────────────
             signal.regime_aligned, signal.regime_alignment_score = self._check_regime_alignment(
                 direction, regime_data
             )
 
-            # ── Quality score (trend + liquidity + spread) ────────────────
-            signal.quality_score = self._compute_quality_score(
-                signal, etf_meta, avg_vol_20
-            )
+            # ── Step 7: Composite score with decay + regime adjustments ────
+            composite = base_score
+            # Regime scaling (heaviest weight — regime is make-or-break for 2x)
+            composite = composite * (0.5 + 0.5 * (signal.regime_alignment_score / 100))
+            # Decay penalty
+            if signal.decay_risk == 'HIGH':
+                composite *= 0.85
+            elif signal.decay_risk == 'MEDIUM':
+                composite *= 0.95
 
-            # ── Pattern score ─────────────────────────────────────────────
-            signal.pattern_score = self._compute_pattern_score(signal.pattern)
+            signal.composite_score = round(max(0, min(100, composite)), 1)
 
-            # ── Composite score with decay penalty ────────────────────────
-            signal.composite_score = self._compute_composite_score(signal)
-
-            # ── Entry / Stop / Target ─────────────────────────────────────
+            # ── Step 8: Entry / Stop / Target (wider for 2x vol) ───────────
             atr = float(last.get('atr', 0) or 0)
             if atr > 0:
                 signal.entry_price = round(close, 2)
                 if direction == 'LONG':
                     signal.stop_loss = round(close - (atr * self.STOP_LOSS_ATR_MULT), 2)
                     signal.target_price = round(close + (atr * self.TARGET_ATR_MULT), 2)
-                else:  # SHORT
+                else:
                     signal.stop_loss = round(close + (atr * self.STOP_LOSS_ATR_MULT), 2)
                     signal.target_price = round(close - (atr * self.TARGET_ATR_MULT), 2)
-                # Risk:Reward
                 risk = abs(signal.entry_price - signal.stop_loss)
                 reward = abs(signal.target_price - signal.entry_price)
                 signal.risk_reward = round(reward / risk, 2) if risk > 0 else 0
 
-            # ── Holding period recommendation ────────────────────────────
+            # ── Step 9: Holding period ─────────────────────────────────────
             signal.recommended_hold_days = self._recommend_hold_days(signal)
 
-            # ── Catalyst warnings ─────────────────────────────────────────
-            signal.catalyst_warning = self._check_catalyst_warnings()
+            # ── Step 10: Catalyst warnings ─────────────────────────────────
+            signal.catalyst_warning = self._check_catalyst_warnings(underlying_ticker)
 
-            # ── Final rationale ───────────────────────────────────────────
-            signal.rationale = self._build_rationale(signal, regime_data)
-
-            # ── Filter: regime misaligned = score 0 ───────────────────────
-            if not signal.regime_aligned and not self._is_neutral_regime(regime_data):
-                # Penalize heavily but don't zero — user may want to see misaligned
-                signal.composite_score = round(signal.composite_score * 0.4, 1)
-                signal.rationale = f"REGIME MISALIGNED — {signal.rationale}"
+            # ── Step 11: Rationale ─────────────────────────────────────────
+            signal.rationale = self._build_rationale(signal, regime_data, underlying_ticker)
 
         except Exception as e:
             logger.warning(f"ETF analysis failed {ticker}: {e}", exc_info=True)
@@ -299,8 +319,69 @@ class LeveragedETFEngine:
 
         return signal
 
+    def _compute_base_score(self, signal: LeveragedETFSignal, df: pd.DataFrame,
+                             ticker: str, etf_meta: Dict) -> float:
+        """Compute base swing score using the unified MasterScorer.
+
+        For ETFs (not single-stock), MasterScorer may not have fundamentals —
+        that's OK, the technicals dominate for ETFs.
+        """
+        # Try to use the full MasterScorer
+        try:
+            score = self.scorer.score_stock(ticker)
+            if score and score.composite_score > 0:
+                return float(score.composite_score)
+        except Exception:
+            pass
+        # Fallback: compute a technicals-only score
+        return self._technicals_only_score(signal)
+
+    def _score_underlying(self, underlying_ticker: str) -> float:
+        """Score the UNDERLYING stock using the full MasterScorer.
+
+        For SNDG → scores SNDK. For NVDU → scores NVDA. Etc.
+        This is the real edge — the ETF is a derivative, so the underlying's
+        swing setup is what matters.
+        """
+        try:
+            score = self.scorer.score_stock(underlying_ticker)
+            if score and score.composite_score > 0:
+                return float(score.composite_score)
+        except Exception as e:
+            logger.debug(f"Underlying score failed {underlying_ticker}: {e}")
+        return 50.0
+
+    def _technicals_only_score(self, signal: LeveragedETFSignal) -> float:
+        """Fallback: technicals-only score (used when MasterScorer can't fetch data)."""
+        score = 50.0
+        # Trend alignment
+        if signal.direction == 'LONG' and 'bullish' in signal.trend:
+            score += 15
+        elif signal.direction == 'LONG' and 'bearish' in signal.trend:
+            score -= 20
+        elif signal.direction == 'SHORT' and 'bearish' in signal.trend:
+            score += 15
+        elif signal.direction == 'SHORT' and 'bullish' in signal.trend:
+            score -= 20
+        # ADX
+        if signal.adx > 30:
+            score += 10
+        elif signal.adx < 18:
+            score -= 10
+        # RSI
+        if signal.direction == 'LONG':
+            if 40 <= signal.rsi <= 65:
+                score += 8
+            elif signal.rsi > 78:
+                score -= 15
+        else:
+            if 40 <= signal.rsi <= 65:
+                score += 5
+            elif signal.rsi > 70:
+                score += 8
+        return round(max(0, min(100, score)), 1)
+
     def _determine_trend(self, last) -> str:
-        """Determine trend from EMA alignment."""
         try:
             close = float(last['close'])
             ema8 = float(last.get('ema8', 0) or 0)
@@ -320,17 +401,13 @@ class LeveragedETFEngine:
             return 'neutral'
 
     def _detect_pattern(self, df: pd.DataFrame, direction: str) -> str:
-        """Detect swing setup patterns. Reuse technicals engine logic."""
         try:
             patterns = self.tech.detect_patterns(df)
-            # For short ETFs, invert the pattern interpretation
-            # (a 'bull_flag' on SDS = bear_flag on S&P 500, etc.)
             if not patterns:
                 return 'none'
             if direction == 'SHORT':
-                # Map bullish patterns to their bearish equivalents for short ETFs
                 pattern_map = {
-                    'vcp': 'vcp_short',  # VCP on the short ETF = bullish for the short
+                    'vcp': 'vcp_short',
                     'episodic_pivot': 'episodic_pivot_short',
                     'bull_flag': 'bear_flag_equivalent',
                     'cup_handle': 'cup_handle_short',
@@ -341,184 +418,66 @@ class LeveragedETFEngine:
             return 'none'
 
     def _check_regime_alignment(self, direction: str, regime_data: Dict) -> Tuple[bool, float]:
-        """Check if the market regime supports this ETF direction.
-
-        CRITICAL: This is the #1 filter for leveraged ETFs.
-        - 2x LONG ETFs only make sense in BULLISH_EXPANSION or CAUTIOUS_BULL
-        - 2x SHORT ETFs only make sense in HIGH_VOLATILITY_DEFENSIVE
-        - In NEUTRAL_SIDEWAYS: skip both (decay will eat you)
-        - In DATA_DEGRADED: skip both (can't trust signals)
-        """
+        """CRITICAL for leveraged ETFs: regime filter."""
         regime = regime_data.get('regime', 'NEUTRAL')
         if regime == 'DATA_DEGRADED':
-            return False, 20.0  # no trades when data is bad
-
+            return False, 20.0
         if direction == 'LONG':
             if regime == 'BULLISH_EXPANSION':
                 return True, 100.0
             elif regime == 'CAUTIOUS_BULL':
                 return True, 75.0
             elif regime == 'NEUTRAL_SIDEWAYS':
-                return False, 35.0  # decay risk, don't buy longs here
+                return False, 35.0
             elif regime == 'HIGH_VOLATILITY_DEFENSIVE':
-                return False, 10.0  # terrible time for longs
+                return False, 10.0
         else:  # SHORT
             if regime == 'HIGH_VOLATILITY_DEFENSIVE':
                 return True, 100.0
             elif regime == 'NEUTRAL_SIDEWAYS':
-                return False, 35.0  # decay risk, don't buy shorts here either
+                return False, 35.0
             elif regime == 'CAUTIOUS_BULL':
-                return False, 20.0  # fighting the tape
+                return False, 20.0
             elif regime == 'BULLISH_EXPANSION':
-                return False, 5.0  # death wish — shorting in bull market
-
+                return False, 5.0
         return False, 50.0
 
-    def _is_neutral_regime(self, regime_data: Dict) -> bool:
-        """Check if regime is sideways (where both directions decay)."""
-        return regime_data.get('regime') == 'NEUTRAL_SIDEWAYS'
-
-    def _compute_quality_score(self, signal: LeveragedETFSignal,
-                                etf_meta: Dict, avg_vol: float) -> float:
-        """Quality = trend strength + liquidity + spread tightness."""
-        score = 50.0
-        # Trend strength (ADX)
-        if signal.adx > 35:
-            score += 20  # very strong trend
-        elif signal.adx > 25:
-            score += 12
-        elif signal.adx > self.MIN_ADX_FOR_TREND:
-            score += 5
-        else:
-            score -= 10  # no trend = bad for swing
-
-        # Trend alignment with direction
-        if signal.direction == 'LONG' and 'bullish' in signal.trend:
-            score += 10
-        elif signal.direction == 'LONG' and 'bearish' in signal.trend:
-            score -= 20  # long ETF in bearish trend = wrong way
-        elif signal.direction == 'SHORT' and 'bearish' in signal.trend:
-            score += 10
-        elif signal.direction == 'SHORT' and 'bullish' in signal.trend:
-            score -= 20
-
-        # RSI extremes (don't chase)
-        if signal.direction == 'LONG':
-            if signal.rsi > self.MAX_RSI_OVERBOUGHT_LONG:
-                score -= 15  # overbought — wait for pullback
-            elif 40 <= signal.rsi <= 65:
-                score += 8  # sweet spot for swing longs
-            elif signal.rsi < 30:
-                score += 5  # oversold bounce potential
-        else:  # SHORT
-            if signal.rsi < 25:
-                score -= 15  # oversold — short squeeze risk
-            elif 40 <= signal.rsi <= 60:
-                score += 5
-            elif signal.rsi > 65:
-                score += 8  # overbought — good short setup
-
-        # Liquidity bonus
-        if avg_vol > 5_000_000:
-            score += 10
-        elif avg_vol > 1_000_000:
-            score += 5
-        elif avg_vol < 200_000:
-            score -= 15  # illiquid
-
-        # Spread tightness (use ETF metadata)
-        spread = etf_meta.get('typical_spread_bps', 10)
-        if spread <= 3:
-            score += 8
-        elif spread <= 8:
-            score += 4
-        elif spread > 20:
-            score -= 10  # wide spreads eat edge
-
-        return round(max(0, min(100, score)), 1)
-
-    def _compute_pattern_score(self, pattern: str) -> float:
-        """Pattern detection — bonus for clean setups."""
-        scores = {
-            'vcp': 25, 'episodic_pivot': 25, 'bull_flag': 18, 'cup_handle': 20,
-            'vcp_short': 25, 'episodic_pivot_short': 25, 'bear_flag_equivalent': 18,
-            'cup_handle_short': 20, 'squeeze': 12, 'none': 0,
-        }
-        return scores.get(pattern, 0)
-
-    def _compute_composite_score(self, signal: LeveragedETFSignal) -> float:
-        """Final composite score with decay penalty.
-
-        Weights:
-        - Quality: 35%
-        - Regime alignment: 35% (heaviest weight — regime is make-or-break for 2x ETFs)
-        - Pattern: 20%
-        - Decay penalty: -10% of score if HIGH decay
-        """
-        composite = (
-            signal.quality_score * 0.35 +
-            signal.regime_alignment_score * 0.35 +
-            signal.pattern_score * 0.20 +
-            50 * 0.10  # base
-        )
-        # Decay penalty
-        if signal.decay_risk == 'HIGH':
-            composite *= 0.85  # -15%
-        elif signal.decay_risk == 'MEDIUM':
-            composite *= 0.95  # -5%
-        # LOW decay = no penalty
-        return round(max(0, min(100, composite)), 1)
-
     def _recommend_hold_days(self, signal: LeveragedETFSignal) -> int:
-        """Recommend holding period based on decay risk + trend strength.
-
-        Higher decay = shorter hold. Stronger trend = can hold longer.
-        Capped at 5-15 trading days for 2x ETFs.
-        """
         base = 10
-        # Decay adjustment
         if signal.decay_risk == 'HIGH':
             base -= 4
         elif signal.decay_risk == 'LOW':
             base += 3
-        # Trend strength
         if signal.adx > 30:
-            base += 2  # strong trend = hold longer
-        elif signal.adx < 20:
-            base -= 3  # weak trend = exit faster
-        # Cap
+            base += 2
+        elif signal.adx < 18:
+            base -= 3
         return max(self.MIN_HOLD_DAYS, min(self.MAX_HOLD_DAYS, base))
 
-    def _check_catalyst_warnings(self) -> str:
-        """Flag upcoming macro catalysts that 2x ETF holders should avoid.
-
-        Checks for:
-        - FOMC meetings (next 10 trading days)
-        - CPI / PPI release dates
-        - Major earnings (mag 7)
-        Note: this is a simplified calendar — wire to FRED econ calendar for production.
-        """
+    def _check_catalyst_warnings(self, underlying_ticker: str = '') -> str:
         today = datetime.now()
         warnings = []
-        # Approximate FOMC dates (8 per year — would need real calendar)
-        # For demo: warn if within 5 days of month-end (often FOMC adjacent)
-        # In production, integrate with FRED or Econoday calendar
         if today.day >= 25:
             warnings.append('FOMC/meeting window approaching (verify on federalreserve.gov)')
-        # CPI comes ~mid-month
         if 10 <= today.day <= 14:
             warnings.append('CPI release window (typically mid-month) — expect volatility')
+        if underlying_ticker:
+            # Check for known earnings dates (would need a real earnings calendar)
+            # For now, just flag if it's earnings season (mid-Jan, mid-Apr, mid-Jul, mid-Oct)
+            if today.month in (1, 4, 7, 10) and 10 <= today.day <= 25:
+                warnings.append(f'Earnings season — {underlying_ticker} may report soon')
         return ' | '.join(warnings)
 
-    def _build_rationale(self, signal: LeveragedETFSignal, regime_data: Dict) -> str:
-        """Human-readable explanation."""
-        parts = []
-        parts.append(f"Score {signal.composite_score:.0f}/100")
+    def _build_rationale(self, signal: LeveragedETFSignal, regime_data: Dict,
+                          underlying_ticker: str = '') -> str:
+        parts = [f"Score {signal.composite_score:.0f}/100"]
+        if underlying_ticker:
+            parts.append(f"Underlying {underlying_ticker} score: {signal.underlying_score:.0f}")
+        parts.append(f"Base swing: {signal.base_swing_score:.0f}")
         parts.append(f"Regime: {regime_data.get('regime', '?')}")
         parts.append(f"Trend: {signal.trend}")
         if signal.pattern != 'none':
             parts.append(f"Pattern: {signal.pattern}")
-        parts.append(f"ADX: {signal.adx}")
         parts.append(f"Decay: {signal.decay_risk} ({signal.estimated_daily_decay_pct:.3f}%/day)")
         parts.append(f"Hold: {signal.recommended_hold_days}d")
         if signal.catalyst_warning:
@@ -527,22 +486,18 @@ class LeveragedETFEngine:
             parts.append("REGIME MISALIGNED")
         return " | ".join(parts)
 
-    # ── Convenience methods for the router ─────────────────────────────────
-
     def get_top_long_candidates(self, limit: int = 10) -> List[LeveragedETFSignal]:
-        """Top 2x long ETF swing candidates (regime-permitting)."""
-        return self.screen(direction_filter='LONG', min_score=60, limit=limit)
+        return self.screen(direction_filter='LONG', min_score=50, limit=limit)
 
     def get_top_short_candidates(self, limit: int = 10) -> List[LeveragedETFSignal]:
-        """Top 2x short ETF swing candidates (regime-permitting)."""
-        return self.screen(direction_filter='SHORT', min_score=60, limit=limit)
+        return self.screen(direction_filter='SHORT', min_score=50, limit=limit)
 
     def get_universe_summary(self) -> Dict:
-        """Summary stats for the leveraged ETF universe."""
         return {
             'total_etfs': len(LEVERAGED_ETF_UNIVERSE),
             'long_etfs': len([e for e in LEVERAGED_ETF_UNIVERSE if e['direction'] == 'LONG']),
             'short_etfs': len([e for e in LEVERAGED_ETF_UNIVERSE if e['direction'] == 'SHORT']),
+            'single_stock_etfs': len([e for e in LEVERAGED_ETF_UNIVERSE if e['asset_class'] == 'single_stock']),
             'by_asset_class': {
                 ac: len([e for e in LEVERAGED_ETF_UNIVERSE if e['asset_class'] == ac])
                 for ac in set(e['asset_class'] for e in LEVERAGED_ETF_UNIVERSE)
