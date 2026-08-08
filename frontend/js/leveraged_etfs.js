@@ -26,7 +26,7 @@ async function loadETFData() {
       if (elShorts) elShorts.innerText = summaryRes.short_etfs || 24;
     }
 
-    const screenRes = await API.leveragedETFs.screen({ min_score: 0, limit: 100 });
+    const screenRes = await API.leveragedETFs.screen({ min_score: 0, limit: 60 });
     const candidates = (screenRes && (screenRes.signals || screenRes.candidates)) ? (screenRes.signals || screenRes.candidates) : [];
     
     if (candidates && candidates.length) {

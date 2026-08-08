@@ -72,7 +72,7 @@ async def screen_leveraged_etfs(
     direction: Optional[str] = Query(None, description='LONG / SHORT / both'),
     asset_class: Optional[str] = Query(None, description='single_stock / equity / sector / commodity / rates / thematic'),
     min_score: float = Query(50, ge=0, le=100, description='Minimum composite score'),
-    limit: int = Query(20, le=50, description='Max results'),
+    limit: int = Query(50, le=100, description='Max results'),
 ):
     """Screen the 2x leveraged ETF universe using the UNIFIED engine.
 
