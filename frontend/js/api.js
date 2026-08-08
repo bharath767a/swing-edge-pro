@@ -96,6 +96,15 @@ const API = {
     check: () => apiFetch('health'),
     getMarketPulse: () => apiFetch('market-pulse'),
   },
+
+  leveragedETFs: {
+    getSummary: () => apiFetch('leveraged-etfs/universe/summary'),
+    screen: (params = {}) => {
+      const query = new URLSearchParams(params).toString();
+      return apiFetch(`leveraged-etfs?${query}`);
+    },
+    getTicker: (ticker) => apiFetch(`leveraged-etfs/${ticker}`),
+  },
 };
 
 window.API = API;
