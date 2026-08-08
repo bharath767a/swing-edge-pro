@@ -1,5 +1,5 @@
 /**
- * SwingEdge Pro v3.2 — 2x Leveraged ETF Screener Controller
+ * SwingEdge Pro v3.3 — 2x Leveraged ETF Screener Controller
  */
 
 let etfData = [];
@@ -19,17 +19,23 @@ async function loadETFData() {
     const summaryRes = await API.leveragedETFs.getSummary();
     if (summaryRes) {
       const elTotal = document.getElementById('stat-total');
-      if (elTotal) elTotal.innerText = summaryRes.total_etfs || 47;
+      if (elTotal) elTotal.innerText = summaryRes.total_etfs || 60;
       const elLongs = document.getElementById('stat-longs');
-      if (elLongs) elLongs.innerText = summaryRes.long_etfs || 24;
+      if (elLongs) elLongs.innerText = summaryRes.long_etfs || 36;
       const elShorts = document.getElementById('stat-shorts');
-      if (elShorts) elShorts.innerText = summaryRes.short_etfs || 23;
+      if (elShorts) elShorts.innerText = summaryRes.short_etfs || 24;
     }
 
-    const screenRes = await API.leveragedETFs.screen({ min_score: 0, limit: 50 });
-    if (screenRes && screenRes.candidates) {
-      etfData = screenRes.candidates;
+    const screenRes = await API.leveragedETFs.screen({ min_score: 0, limit: 100 });
+    const candidates = (screenRes && (screenRes.signals || screenRes.candidates)) ? (screenRes.signals || screenRes.candidates) : [];
+    
+    if (candidates && candidates.length) {
+      etfData = candidates;
       renderETFTable(etfData);
+    } else {
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center; padding:30px; color:var(--text-secondary);">No 2x Leveraged ETFs currently match regime criteria.</td></tr>';
+      }
     }
   } catch (err) {
     console.error('Error loading ETF data:', err);
@@ -40,13 +46,14 @@ async function loadETFData() {
 }
 
 function filterETFs() {
-  const dir = document.getElementById('filter-direction').value;
-  const assetClass = document.getElementById('filter-asset-class').value;
-  const minScore = parseFloat(document.getElementById('filter-min-score').value) || 0;
+  const dir = document.getElementById('filter-direction')?.value || '';
+  const assetClass = document.getElementById('filter-asset-class')?.value || '';
+  const minScore = parseFloat(document.getElementById('filter-min-score')?.value) || 0;
 
   const filtered = etfData.filter(item => {
-    if (dir && item.direction !== dir) return false;
-    if (assetClass && item.asset_class !== assetClass) return false;
+    const itemDir = (item.direction || '').toUpperCase();
+    if (dir && itemDir !== dir.toUpperCase()) return false;
+    if (assetClass && (item.asset_class || '').toLowerCase() !== assetClass.toLowerCase()) return false;
     if (item.composite_score < minScore) return false;
     return true;
   });
@@ -64,8 +71,9 @@ function renderETFTable(list) {
   }
 
   tbody.innerHTML = list.map(item => {
-    const isLong = item.direction === 'long';
+    const isLong = (item.direction || '').toUpperCase() === 'LONG';
     const scoreColor = item.composite_score >= 70 ? 'var(--green)' : (item.composite_score >= 50 ? 'var(--blue)' : 'var(--gold)');
+    const underlyingText = item.underlying_ticker ? `${item.underlying} (${item.underlying_ticker})` : (item.underlying || 'Index');
     
     return `
       <tr>
@@ -75,11 +83,11 @@ function renderETFTable(list) {
         <td>
           <span class="badge ${isLong ? 'bullish' : 'bearish'}">${isLong ? '2x LONG' : '2x SHORT'}</span>
         </td>
-        <td><span style="font-size:13px; color:var(--text-primary);">${item.underlying || 'Index'}</span></td>
-        <td><span class="badge neutral">${(item.asset_class || 'equity').toUpperCase()}</span></td>
+        <td><span style="font-size:13px; color:var(--text-primary);">${underlyingText}</span></td>
+        <td><span class="badge neutral">${(item.asset_class || 'equity').toUpperCase().replace('_', ' ')}</span></td>
         <td><strong>$${(item.current_price || 0).toFixed(2)}</strong></td>
         <td><strong style="color:${scoreColor}; font-size:15px;">${item.composite_score}</strong></td>
-        <td><span class="badge ${item.decay_risk === 'LOW' ? 'bullish' : 'neutral'}">${item.decay_risk || 'MODERATE'}</span></td>
+        <td><span class="badge ${item.decay_risk === 'LOW' ? 'bullish' : 'neutral'}">${item.decay_risk || 'MEDIUM'}</span></td>
         <td><span style="font-size:12px; color:var(--red); font-weight:600;">-${(item.volatility_drag_5d_pct || 0.5).toFixed(2)}%</span></td>
         <td>
           <div style="font-size:12px; color:var(--green);">Target: $${(item.target_price || 0).toFixed(2)}</div>

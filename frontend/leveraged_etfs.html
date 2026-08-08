@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>2x Leveraged ETFs Screener - SwingEdge Pro v3.2</title>
+  <title>2x Leveraged ETFs Screener - SwingEdge Pro v3.3</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/components.css">
@@ -12,13 +12,13 @@
     <div class="sidebar">
       <div class="sidebar-header"><i class="fas fa-bolt text-blue"></i> SwingEdge<span>Pro v3</span></div>
       <div class="nav-menu">
-        <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Dashboard</a>
-        <a href="screener.html" class="nav-item"><i class="fas fa-filter"></i> Stock Screener</a>
-        <a href="leveraged_etfs.html" class="nav-item active"><i class="fas fa-layer-group text-gold"></i> 2x Leveraged ETFs</a>
-        <a href="sectors.html" class="nav-item"><i class="fas fa-chart-pie"></i> Sectors</a>
-        <a href="intelligence.html" class="nav-item"><i class="fas fa-globe"></i> Intelligence</a>
-        <a href="backtest.html" class="nav-item"><i class="fas fa-vial"></i> Backtest Lab</a>
-        <a href="portfolio.html" class="nav-item"><i class="fas fa-briefcase"></i> Watchlist</a>
+        <a href="index.html" class="nav-item" id="nav-dashboard"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="screener.html" class="nav-item" id="nav-screener"><i class="fas fa-filter"></i> Stock Screener</a>
+        <a href="leveraged_etfs.html" class="nav-item active" id="nav-leveraged"><i class="fas fa-layer-group text-gold"></i> 2x Leveraged ETFs</a>
+        <a href="sectors.html" class="nav-item" id="nav-sectors"><i class="fas fa-chart-pie"></i> Sectors</a>
+        <a href="intelligence.html" class="nav-item" id="nav-intelligence"><i class="fas fa-globe"></i> Intelligence</a>
+        <a href="backtest.html" class="nav-item" id="nav-backtest"><i class="fas fa-vial"></i> Backtest Lab</a>
+        <a href="portfolio.html" class="nav-item" id="nav-portfolio"><i class="fas fa-briefcase"></i> Watchlist</a>
       </div>
     </div>
 
@@ -28,8 +28,8 @@
         <!-- Header -->
         <div class="flex items-center justify-between mb-4">
           <div>
-            <h2><i class="fas fa-layer-group text-gold"></i> 2x Leveraged ETF Swing Engine</h2>
-            <div class="text-secondary" style="font-size:13px;">Decay-aware swing trade signals across 47 leveraged ETFs (Equities, Sectors, Commodities, Rates, Themes).</div>
+            <h2><i class="fas fa-layer-group text-gold"></i> 2x Leveraged ETF Swing Engine (Unified v3.3)</h2>
+            <div class="text-secondary" style="font-size:13px;">Decay-aware swing trade signals across 60 leveraged ETFs (Single Stocks, Equities, Sectors, Commodities, Rates, Themes).</div>
           </div>
           <button class="btn btn-primary" onclick="loadETFData()"><i class="fas fa-sync"></i> Refresh ETFs</button>
         </div>
@@ -38,17 +38,17 @@
         <div class="grid grid-cols-4 gap-4 mb-4" id="etf-summary-cards">
           <div class="card" style="padding:16px;">
             <div class="text-secondary" style="font-size:12px;">Total 2x ETF Universe</div>
-            <div id="stat-total" style="font-size:24px; font-weight:800; color:var(--blue); margin-top:4px;">47</div>
+            <div id="stat-total" style="font-size:24px; font-weight:800; color:var(--blue); margin-top:4px;">60</div>
             <div style="font-size:11px; color:var(--text-secondary);">Decay-Monitored ETFs</div>
           </div>
           <div class="card" style="padding:16px;">
             <div class="text-secondary" style="font-size:12px;">2x Long ETFs</div>
-            <div id="stat-longs" style="font-size:24px; font-weight:800; color:var(--green); margin-top:4px;">24</div>
+            <div id="stat-longs" style="font-size:24px; font-weight:800; color:var(--green); margin-top:4px;">36</div>
             <div style="font-size:11px; color:var(--text-secondary);">Bullish Regime Aligned</div>
           </div>
           <div class="card" style="padding:16px;">
             <div class="text-secondary" style="font-size:12px;">2x Short / Inverse ETFs</div>
-            <div id="stat-shorts" style="font-size:24px; font-weight:800; color:var(--red); margin-top:4px;">23</div>
+            <div id="stat-shorts" style="font-size:24px; font-weight:800; color:var(--red); margin-top:4px;">24</div>
             <div style="font-size:11px; color:var(--text-secondary);">Bearish Protection</div>
           </div>
           <div class="card" style="padding:16px;">
@@ -65,14 +65,15 @@
               <label class="text-secondary" style="font-size:12px; display:block; margin-bottom:4px;">Direction</label>
               <select id="filter-direction" onchange="filterETFs()" style="background:rgba(255,255,255,0.05); color:#fff; border:1px solid var(--border); padding:8px 12px; border-radius:6px;">
                 <option value="">All (Long & Short)</option>
-                <option value="long">2x Long Bullish</option>
-                <option value="short">2x Short Inverse</option>
+                <option value="LONG">2x Long Bullish</option>
+                <option value="SHORT">2x Short Inverse</option>
               </select>
             </div>
             <div>
               <label class="text-secondary" style="font-size:12px; display:block; margin-bottom:4px;">Asset Class</label>
               <select id="filter-asset-class" onchange="filterETFs()" style="background:rgba(255,255,255,0.05); color:#fff; border:1px solid var(--border); padding:8px 12px; border-radius:6px;">
                 <option value="">All Asset Classes</option>
+                <option value="single_stock">Single Stock 2x ETFs (NVDU, SNDG, TSLT, CONL)</option>
                 <option value="equity">Equity Index (SSO, QLD, UPRO)</option>
                 <option value="sector">Sectors (SOXL, USD, TECL, NUGT)</option>
                 <option value="commodity">Commodities (UGL, AGQ, UCO)</option>
@@ -82,7 +83,7 @@
             </div>
             <div>
               <label class="text-secondary" style="font-size:12px; display:block; margin-bottom:4px;">Min Composite Score</label>
-              <input type="number" id="filter-min-score" value="50" min="0" max="100" onchange="filterETFs()" style="width:100px; background:rgba(255,255,255,0.05); color:#fff; border:1px solid var(--border); padding:8px 12px; border-radius:6px;">
+              <input type="number" id="filter-min-score" value="0" min="0" max="100" onchange="filterETFs()" style="width:100px; background:rgba(255,255,255,0.05); color:#fff; border:1px solid var(--border); padding:8px 12px; border-radius:6px;">
             </div>
           </div>
         </div>

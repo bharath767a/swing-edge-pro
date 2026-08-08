@@ -114,9 +114,11 @@ async def screen_leveraged_etfs(
         )
         # Include regime info so frontend can explain why results may be empty
         regime_data = engine.regime.evaluate_regime()
+        signals_formatted = [_format_signal(s) for s in signals]
         return {
             'count': len(signals),
-            'signals': [_format_signal(s) for s in signals],
+            'signals': signals_formatted,
+            'candidates': signals_formatted,  # Alias for frontend compatibility
             'regime': {
                 'regime': regime_data.get('regime', 'NEUTRAL'),
                 'risk_multiplier': regime_data.get('risk_multiplier', 1.0),
