@@ -156,15 +156,18 @@ if os.path.exists(frontend_dir):
 
     @app.get('/{path:path}')
     async def serve_frontend(path: str):
+        headers = {"Cache-Control": "no-cache, no-store, must-revalidate, max-age=0"}
+        if not path or path == '/':
+            return FileResponse(str(frontend_root / 'index.html'), headers=headers)
         # Resolve and verify the resolved path is inside frontend_root
         target = (frontend_root / path).resolve()
-        if not str(target).startswith(str(frontend_root) + os.sep):
+        if target != frontend_root and not str(target).startswith(str(frontend_root) + os.sep):
             raise HTTPException(status_code=404, detail='Not found')
         if target.is_file():
-            return FileResponse(str(target))
+            return FileResponse(str(target), headers=headers)
         # Fallback to index.html for SPA-style routes
         index_path = frontend_root / 'index.html'
-        return FileResponse(str(index_path))
+        return FileResponse(str(index_path), headers=headers)
 
     @app.get('/')
     async def root():
