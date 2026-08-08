@@ -19,7 +19,7 @@ import uvicorn
 
 from backend.database import init_db
 from backend.scheduler import scheduler, init_scheduler
-from backend.routers import screener, stock, news, sectors, insider, backtest, alerts, watchlist
+from backend.routers import screener, stock, news, sectors, insider, backtest, alerts, watchlist, leveraged_etfs
 from backend.config import settings
 
 logging.basicConfig(
@@ -97,6 +97,7 @@ app.include_router(insider.router)
 app.include_router(backtest.router)
 app.include_router(alerts.router)
 app.include_router(watchlist.router)
+app.include_router(leveraged_etfs.router)  # NEW in v3: 2x leveraged ETF screener
 
 
 @app.get('/api/health')
