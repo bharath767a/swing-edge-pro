@@ -1,5 +1,5 @@
 """
-Test suite for the new structure/pivot/order-flow/hold-period engines.
+Test suite for the structure/pivot/order-flow/hold-period engines.
 """
 import pytest
 import numpy as np
@@ -17,7 +17,6 @@ def sample_trending_df():
     closes = []
     base = 100
     for i in range(n):
-        # Sinusoidal up-trend
         trend = 0.1 * i
         cycle = 3 * np.sin(i / 5)
         noise = np.random.normal(0, 1)
@@ -33,7 +32,7 @@ def sample_trending_df():
     })
 
 
-# ── Market Structure Engine ─────────────────────────────────────────────────
+# ── Market Structure Engine (Simplified) ────────────────────────────────────
 
 class TestMarketStructure:
     def test_finds_swing_highs_and_lows(self, sample_trending_df):
@@ -74,32 +73,6 @@ class TestMarketStructure:
         distances = [abs(l['distance_pct']) for l in structure.key_levels]
         assert distances == sorted(distances)
 
-    def test_order_blocks_detected(self, sample_trending_df):
-        from backend.engine.market_structure import MarketStructureEngine
-        ms = MarketStructureEngine()
-        structure = ms.analyze(sample_trending_df)
-        # Order blocks is a list (may be empty on simple synthetic data)
-        assert isinstance(structure.order_blocks, list)
-        for ob in structure.order_blocks:
-            assert ob.type in ('BULLISH', 'BEARISH')
-            assert ob.high >= ob.low
-
-    def test_liquidity_pools_structure(self, sample_trending_df):
-        from backend.engine.market_structure import MarketStructureEngine
-        ms = MarketStructureEngine()
-        structure = ms.analyze(sample_trending_df)
-        for lp in structure.liquidity_pools:
-            assert lp.type in ('BUY_SIDE', 'SELL_SIDE')
-            assert len(lp.swing_indices) >= 2
-
-    def test_fvgs_structure(self, sample_trending_df):
-        from backend.engine.market_structure import MarketStructureEngine
-        ms = MarketStructureEngine()
-        structure = ms.analyze(sample_trending_df)
-        for fvg in structure.fair_value_gaps:
-            assert fvg.type in ('BULLISH', 'BEARISH')
-            assert fvg.top > fvg.bottom
-
     def test_trend_bias_determined(self, sample_trending_df):
         from backend.engine.market_structure import MarketStructureEngine
         ms = MarketStructureEngine()
@@ -114,14 +87,27 @@ class TestMarketStructure:
         current_price = float(sample_trending_df['close'].iloc[-1])
         summary = ms.get_structure_summary(structure, current_price)
         assert 'trend_bias' in summary
-        assert 'order_block_count' in summary
-        assert 'liquidity_pool_count' in summary
+        assert 'swing_high_count' in summary
+        assert 'swing_low_count' in summary
+        assert 'total_key_levels' in summary
 
     def test_handles_empty_df(self):
         from backend.engine.market_structure import MarketStructureEngine
         ms = MarketStructureEngine()
         structure = ms.analyze(pd.DataFrame())
         assert structure.trend_bias == 'NEUTRAL'
+
+    def test_levels_deduplicated(self, sample_trending_df):
+        """Levels within 0.1% of each other should be deduplicated."""
+        from backend.engine.market_structure import MarketStructureEngine
+        ms = MarketStructureEngine()
+        structure = ms.analyze(sample_trending_df)
+        # No two levels should be within 0.1% of each other
+        for i, l1 in enumerate(structure.key_levels):
+            for l2 in structure.key_levels[i+1:]:
+                if l1['price'] > 0 and l2['price'] > 0:
+                    diff_pct = abs(l1['price'] - l2['price']) / min(l1['price'], l2['price']) * 100
+                    assert diff_pct >= 0.1, f"Levels {l1['price']} and {l2['price']} are within 0.1%"
 
 
 # ── Pivot Engine ────────────────────────────────────────────────────────────
@@ -192,7 +178,7 @@ class TestPivotEngine:
         # Weekly range should be wider than daily
         daily_range = mt['daily'].R1 - mt['daily'].S1
         weekly_range = mt['weekly'].R1 - mt['weekly'].S1
-        assert weekly_range >= daily_range * 0.5  # at least half (could be similar)
+        assert weekly_range >= daily_range * 0.5
 
     def test_confluence_detection(self, sample_trending_df):
         from backend.engine.pivots import PivotEngine
@@ -201,12 +187,11 @@ class TestPivotEngine:
         # Fake some structure levels near pivot levels
         structure_levels = [
             {'price': mt['daily'].P, 'type': 'swing_low', 'direction': 'BULLISH', 'strength': 3, 'distance_pct': 0},
-            {'price': mt['daily'].R1 * 1.001, 'type': 'order_block_bullish', 'direction': 'BULLISH', 'strength': 4, 'distance_pct': 1},
-            {'price': 9999, 'type': 'swing_high', 'direction': 'NEUTRAL', 'strength': 1, 'distance_pct': 50},  # far away
+            {'price': mt['daily'].R1 * 1.001, 'type': 'swing_high', 'direction': 'NEUTRAL', 'strength': 4, 'distance_pct': 1},
+            {'price': 9999, 'type': 'swing_high', 'direction': 'NEUTRAL', 'strength': 1, 'distance_pct': 50},
         ]
         confluences = pe.find_confluence(mt, structure_levels, tolerance_pct=0.5)
         assert len(confluences) > 0
-        # At least one confluence should be the pivot + structure overlap
         assert any(c['level_count'] >= 2 for c in confluences)
 
     def test_pivot_summary(self, sample_trending_df):
@@ -237,11 +222,11 @@ class TestHoldPeriodEngine:
         from backend.engine.hold_period import HoldPeriodEngine
         hp = HoldPeriodEngine()
         rec = hp.recommend(
-            entry_price=100, target=130, stop=90,  # 30% target
+            entry_price=100, target=130, stop=90,
             atr=4.0, adx=40, is_leveraged=True,
             daily_decay_pct=0.05,
         )
-        assert rec.recommended_days <= 15  # leveraged cap
+        assert rec.recommended_days <= 15
 
     def test_high_decay_shorter_hold(self):
         """High daily decay should reduce recommended hold for leveraged ETFs."""
@@ -258,7 +243,6 @@ class TestHoldPeriodEngine:
         assert high_decay.recommended_days <= low_decay.recommended_days
 
     def test_event_caps_hold(self):
-        """Event in 5 days should cap hold at 4 days."""
         from backend.engine.hold_period import HoldPeriodEngine
         hp = HoldPeriodEngine()
         rec = hp.recommend(
@@ -266,10 +250,10 @@ class TestHoldPeriodEngine:
             atr=2.0, adx=30, is_leveraged=False,
             event_days_ahead=5,
         )
-        assert rec.recommended_days <= 4  # exit day before catalyst
+        assert rec.recommended_days <= 4
 
     def test_structure_levels_reduce_estimate_for_close_target(self):
-        """If target is far, structure estimate is longer; close target = shorter."""
+        """Close target = shorter hold; far target = longer hold."""
         from backend.engine.hold_period import HoldPeriodEngine
         hp = HoldPeriodEngine()
         close_target = hp.recommend(
@@ -285,20 +269,16 @@ class TestHoldPeriodEngine:
     def test_confidence_higher_when_methods_agree(self):
         from backend.engine.hold_period import HoldPeriodEngine
         hp = HoldPeriodEngine()
-        # Make all methods agree: ATR = 1.0, target = 10% away, ADX = 30 (trending speed=0.5)
-        # ATR estimate = 10 / (1.0 × 0.5) = 20 days
-        # Structure estimate = 10 / 1.2 = ~8 days (different — lower confidence)
         rec = hp.recommend(
             entry_price=100, target=110, stop=95,
             atr=2.0, adx=30, is_leveraged=False,
         )
         assert 0 <= rec.confidence <= 1
-        assert rec.rationale  # non-empty
+        assert rec.rationale
 
     def test_min_3_days_enforced(self):
         from backend.engine.hold_period import HoldPeriodEngine
         hp = HoldPeriodEngine()
-        # Very close target — should still be at least 3 days
         rec = hp.recommend(
             entry_price=100, target=100.5, stop=99.5,
             atr=0.5, adx=40, is_leveraged=False,
@@ -314,7 +294,6 @@ class TestOrderFlowEngine:
         of = OrderFlowEngine()
         result = of.analyze(sample_trending_df)
         assert result.data_source in ('approximation', 'polygon', 'databento', 'alpaca', 'ibkr')
-        # Default install = no keys = approximation
         if not of.real_source or of.real_source == 'approximation':
             assert result.data_source == 'approximation'
 
@@ -322,19 +301,18 @@ class TestOrderFlowEngine:
         """Strong up bars should produce > 50% buy pressure."""
         from backend.engine.order_flow import OrderFlowEngine
         of = OrderFlowEngine()
-        # Build df where every bar closes at its high (strong buying)
         n = 30
         df = pd.DataFrame({
             'date': pd.date_range(end=datetime.now(), periods=n, freq='B').strftime('%Y-%m-%d'),
             'open': np.linspace(100, 130, n),
             'high': np.linspace(101, 131, n),
             'low': np.linspace(99, 129, n),
-            'close': np.linspace(101, 131, n),  # close = high
+            'close': np.linspace(101, 131, n),
             'volume': np.full(n, 1_000_000.0),
         })
         result = of.analyze(df)
         assert result.buy_pressure_pct > 50
-        assert result.cvd > 0  # positive cumulative delta
+        assert result.cvd > 0
 
     def test_sell_pressure_in_downtrend(self):
         """Strong down bars should produce > 50% sell pressure."""
@@ -346,7 +324,7 @@ class TestOrderFlowEngine:
             'open': np.linspace(130, 100, n),
             'high': np.linspace(131, 101, n),
             'low': np.linspace(129, 99, n),
-            'close': np.linspace(129, 99, n),  # close = low
+            'close': np.linspace(129, 99, n),
             'volume': np.full(n, 1_000_000.0),
         })
         result = of.analyze(df)
@@ -358,12 +336,10 @@ class TestOrderFlowEngine:
         from backend.engine.order_flow import OrderFlowEngine
         of = OrderFlowEngine()
         n = 25
-        # Normal bars for first 20
         df_normal = pd.DataFrame({
             'open': [100]*20, 'high': [101]*20, 'low': [99]*20, 'close': [100]*20,
             'volume': [1_000_000]*20,
         })
-        # Then 5 climax bars
         df_climax = pd.DataFrame({
             'open': [100]*5, 'high': [105]*5, 'low': [95]*5, 'close': [104]*5,
             'volume': [5_000_000]*5,
@@ -383,7 +359,6 @@ class TestOrderFlowEngine:
         assert 'source' in info
         assert 'real_l2' in info
         assert 'description' in info
-        # Without keys, should be approximation
         if not of.polygon_key and not of.databento_key:
             assert info['source'] == 'approximation'
             assert 'OHLCV-based approximation' in info['description']
