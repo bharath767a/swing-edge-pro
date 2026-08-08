@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Backtest Lab - SwingEdge Pro</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+  <div class="app-container">
+    <div class="sidebar">
+      <div class="sidebar-header"><i class="fas fa-bolt text-blue"></i> SwingEdge<span>Pro</span></div>
+      <div class="nav-menu">
+        <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="screener.html" class="nav-item"><i class="fas fa-filter"></i> Screener</a>
+        <a href="sectors.html" class="nav-item"><i class="fas fa-chart-pie"></i> Sectors</a>
+        <a href="intelligence.html" class="nav-item"><i class="fas fa-globe"></i> Intelligence</a>
+        <a href="backtest.html" class="nav-item active"><i class="fas fa-vial"></i> Backtest Lab</a>
+        <a href="portfolio.html" class="nav-item"><i class="fas fa-briefcase"></i> Watchlist</a>
+      </div>
+    </div>
+    
+    <div class="main-wrapper" style="flex-direction:row;">
+      <div style="width: 320px; border-right: 1px solid var(--border); padding: 24px; background: var(--bg-secondary);">
+        <h3 style="margin-bottom: 24px;">Lab Settings</h3>
+        <div style="margin-bottom: 16px;">
+          <label class="text-secondary" style="font-size:12px;">Strategy</label>
+          <select style="margin-top:8px;">
+            <option>VCP Breakout</option>
+            <option>Episodic Pivot</option>
+            <option>Mean Reversion</option>
+          </select>
+        </div>
+        <div style="margin-bottom: 16px;">
+          <label class="text-secondary" style="font-size:12px;">Capital ($)</label>
+          <input type="number" value="100000" style="margin-top:8px;">
+        </div>
+        <button class="btn btn-primary" style="width:100%; justify-content:center; margin-top:24px;">Run Backtest</button>
+      </div>
+      
+      <div class="content-area">
+        <h2 style="margin-bottom:24px;">Results</h2>
+        <div class="grid grid-cols-4 gap-4" style="margin-bottom:24px;">
+          <div class="card"><div class="text-secondary">Win Rate</div><div style="font-size:24px; font-weight:700;" class="text-green">68%</div></div>
+          <div class="card"><div class="text-secondary">Net Profit</div><div style="font-size:24px; font-weight:700;" class="text-green">+$45,230</div></div>
+          <div class="card"><div class="text-secondary">Max DD</div><div style="font-size:24px; font-weight:700;" class="text-red">-12.4%</div></div>
+          <div class="card"><div class="text-secondary">Trades</div><div style="font-size:24px; font-weight:700;">142</div></div>
+        </div>
+        
+        <div class="card">
+          <h3 style="margin-bottom:16px;">Equity Curve</h3>
+          <div id="equity-chart" style="height:300px; width:100%;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+  <script src="js/utils.js"></script>
+  <script src="js/charts.js"></script>
+  <script>
+    if (window.initializePage) initializePage('backtest');
+    setTimeout(() => {
+      Charts.createLineChart('equity-chart', Charts.generateMockData(100000, 100).map(d => ({time:d.time, value: d.value/1000 + 80000})), '#00D4FF');
+    }, 500);
+  </script>
+</body>
+</html>

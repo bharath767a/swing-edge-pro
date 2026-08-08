@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Watchlist - SwingEdge Pro</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+  <div class="app-container">
+    <div class="sidebar">
+      <div class="sidebar-header"><i class="fas fa-bolt text-blue"></i> SwingEdge<span>Pro</span></div>
+      <div class="nav-menu">
+        <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="screener.html" class="nav-item"><i class="fas fa-filter"></i> Screener</a>
+        <a href="sectors.html" class="nav-item"><i class="fas fa-chart-pie"></i> Sectors</a>
+        <a href="intelligence.html" class="nav-item"><i class="fas fa-globe"></i> Intelligence</a>
+        <a href="backtest.html" class="nav-item"><i class="fas fa-vial"></i> Backtest Lab</a>
+        <a href="portfolio.html" class="nav-item active"><i class="fas fa-briefcase"></i> Watchlist</a>
+      </div>
+    </div>
+    
+    <div class="main-wrapper">
+      <div class="content-area">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+          <h2>Watchlist & Alerts</h2>
+          <button class="btn btn-primary"><i class="fas fa-plus"></i> Add Symbol</button>
+        </div>
+        
+        <div class="card" style="padding:0; margin-bottom:24px;">
+          <table style="margin:0;">
+            <thead>
+              <tr><th>Ticker</th><th>Price</th><th>Target</th><th>Stop</th><th>Notes</th><th>Action</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>NVDA</strong></td>
+                <td>$118.45 <span class="text-green">+3.2%</span></td>
+                <td class="text-green">$130.00</td>
+                <td class="text-red">$110.00</td>
+                <td class="text-secondary">VCP Breakout</td>
+                <td><button class="btn btn-secondary"><i class="fas fa-trash text-red"></i></button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="js/utils.js"></script>
+  <script>
+    if (window.initializePage) initializePage('portfolio');
+  </script>
+</body>
+</html>

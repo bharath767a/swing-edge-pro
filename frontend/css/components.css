@@ -1,0 +1,69 @@
+/* Component Specific Styles */
+
+/* Stock Card */
+.stock-card { display: flex; flex-direction: column; gap: 12px; }
+.stock-card-header { display: flex; justify-content: space-between; align-items: flex-start; }
+.stock-card-ticker { font-size: 20px; font-weight: 700; color: #fff; }
+.stock-card-name { font-size: 12px; color: var(--text-secondary); }
+
+/* Circular Score Gauge */
+.score-circle { position: relative; width: 60px; height: 60px; }
+.score-circle svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.score-circle circle { fill: none; stroke-width: 6; stroke-linecap: round; }
+.score-circle .bg { stroke: var(--border); }
+.score-circle .progress { stroke: var(--blue); transition: stroke-dashoffset 1s ease-out; }
+.score-circle-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: 700; font-size: 16px; color: #fff; }
+
+/* Sector Tile */
+.sector-tile { display: flex; flex-direction: column; justify-content: space-between; height: 120px; padding: 16px; border-radius: var(--radius); color: #fff; cursor: pointer; transition: transform 0.2s; position: relative; overflow: hidden; }
+.sector-tile:hover { transform: translateY(-2px); }
+.sector-tile-name { font-weight: 600; font-size: 14px; z-index: 1; }
+.sector-tile-perf { font-size: 24px; font-weight: 800; font-family: 'JetBrains Mono', monospace; z-index: 1; }
+.sector-tile-etf { font-size: 12px; opacity: 0.8; z-index: 1; }
+
+/* News Card */
+.news-card { display: flex; gap: 16px; padding: 16px; background: var(--bg-card); border-radius: var(--radius-sm); border: 1px solid var(--border); margin-bottom: 12px; position: relative; overflow: hidden; }
+.news-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
+.news-bar.bullish { background: var(--green); }
+.news-bar.bearish { background: var(--red); }
+.news-bar.neutral { background: var(--text-secondary); }
+.news-content { flex: 1; }
+.news-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; color: var(--text-muted); }
+.news-title { font-weight: 500; color: var(--text-primary); margin-bottom: 8px; line-height: 1.4; }
+
+/* Insider Row */
+.insider-buy { color: var(--green); }
+.insider-sell { color: var(--red); }
+
+/* Chart Toolbar */
+.chart-toolbar { display: flex; gap: 8px; margin-bottom: 16px; }
+.chart-period-btn { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.chart-period-btn.active, .chart-period-btn:hover { background: rgba(0, 212, 255, 0.1); border-color: var(--blue); color: var(--blue); }
+
+/* Alert Dot */
+.alert-dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; display: inline-block; animation: pulse-dot 2s infinite; }
+
+/* Risk Box */
+.risk-box { background: rgba(0,0,0,0.2); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; }
+.risk-label { font-size: 11px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 4px; }
+.risk-value { font-size: 16px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+
+/* Progress Bar */
+.progress-container { width: 100%; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 3px; }
+
+/* Table sparklines */
+.sparkline-cell { width: 80px; height: 30px; }
+
+/* Highlight rows */
+.row-glow-gold { box-shadow: inset 0 0 20px rgba(255, 215, 0, 0.1); border-left: 3px solid var(--gold) !important; }
+.row-glow-green { border-left: 3px solid var(--green) !important; }
+
+/* Intelligence Cards */
+.global-impact-card { background: linear-gradient(145deg, var(--bg-card), rgba(0,0,0,0.2)); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; position: relative; }
+.political-signal-card { border: 1px solid var(--gold); background: rgba(255, 215, 0, 0.05); }
+
+/* Custom Tab Bar */
+.tab-bar { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 24px; gap: 24px; }
+.tab-btn { background: none; border: none; padding: 12px 0; color: var(--text-secondary); font-weight: 500; cursor: pointer; border-bottom: 2px solid transparent; }
+.tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }

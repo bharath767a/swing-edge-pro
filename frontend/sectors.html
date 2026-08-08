@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Sectors - SwingEdge Pro</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header"><i class="fas fa-bolt text-blue"></i> SwingEdge<span>Pro</span></div>
+      <div class="nav-menu">
+        <a href="index.html" class="nav-item" id="nav-dashboard"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="screener.html" class="nav-item" id="nav-screener"><i class="fas fa-filter"></i> Screener</a>
+        <a href="sectors.html" class="nav-item active" id="nav-sectors"><i class="fas fa-chart-pie"></i> Sectors</a>
+        <a href="intelligence.html" class="nav-item" id="nav-intelligence"><i class="fas fa-globe"></i> Intelligence</a>
+        <a href="backtest.html" class="nav-item" id="nav-backtest"><i class="fas fa-vial"></i> Backtest Lab</a>
+        <a href="portfolio.html" class="nav-item" id="nav-portfolio"><i class="fas fa-briefcase"></i> Watchlist</a>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-wrapper">
+      <!-- Risk Mode Banner -->
+      <div style="background: rgba(0, 255, 136, 0.05); border-bottom: 1px solid var(--green); padding: 20px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h2 style="color: var(--green); margin-bottom:4px;">RISK ON</h2>
+          <div style="color: var(--text-secondary); font-size:13px;">Market favoring High Beta, Tech, and Consumer Discretionary.</div>
+        </div>
+        <i class="fas fa-rocket text-green" style="font-size:24px;"></i>
+      </div>
+
+      <div class="content-area">
+        <h2 style="margin-bottom: 24px;">Sector Performance</h2>
+        <div class="grid grid-cols-4 gap-4" id="sector-grid-full">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="grid grid-cols-2 gap-4" style="margin-top:24px;">
+          <div class="card">
+            <h3 style="margin-bottom:16px;">Money Flow Rotation</h3>
+            <p class="text-secondary">Inflows: Technology (XLK), Communications (XLC)<br>Outflows: Energy (XLE), Real Estate (XLRE)</p>
+          </div>
+          <div class="card">
+            <h3 style="margin-bottom:16px;">Global Correlation</h3>
+            <p class="text-secondary">High positive correlation detected between US Tech and Taiwan Semi Index (0.92).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/sectors.js"></script>
+</body>
+</html>

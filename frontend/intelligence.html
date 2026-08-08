@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Intelligence Feed - SwingEdge Pro</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+  <div class="app-container">
+    <div class="sidebar">
+      <div class="sidebar-header"><i class="fas fa-bolt text-blue"></i> SwingEdge<span>Pro</span></div>
+      <div class="nav-menu">
+        <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="screener.html" class="nav-item"><i class="fas fa-filter"></i> Screener</a>
+        <a href="sectors.html" class="nav-item"><i class="fas fa-chart-pie"></i> Sectors</a>
+        <a href="intelligence.html" class="nav-item active"><i class="fas fa-globe"></i> Intelligence</a>
+        <a href="backtest.html" class="nav-item"><i class="fas fa-vial"></i> Backtest Lab</a>
+        <a href="portfolio.html" class="nav-item"><i class="fas fa-briefcase"></i> Watchlist</a>
+      </div>
+    </div>
+    
+    <div class="main-wrapper">
+      <div class="content-area" style="padding: 24px;">
+        <h2 style="margin-bottom:24px;">Intelligence Feed</h2>
+        
+        <div class="tab-bar">
+          <button class="tab-btn active" onclick="switchIntelTab('all')">All</button>
+          <button class="tab-btn" onclick="switchIntelTab('global')">Global Impact</button>
+          <button class="tab-btn" onclick="switchIntelTab('macro')">Macro</button>
+          <button class="tab-btn" onclick="switchIntelTab('insider')">Insider</button>
+        </div>
+        
+        <div id="intelligence-container" style="margin-top: 20px;">
+          <!-- Dynamic Content Rendered Here -->
+        </div>
+
+      </div>
+    </div>
+  </div>
+  
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/intelligence.js"></script>
+</body>
+</html>

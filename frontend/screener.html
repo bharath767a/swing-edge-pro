@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Screener - SwingEdge Pro</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header"><i class="fas fa-bolt text-blue"></i> SwingEdge<span>Pro</span></div>
+      <div class="nav-menu">
+        <a href="index.html" class="nav-item"><i class="fas fa-home"></i> Dashboard</a>
+        <a href="screener.html" class="nav-item active"><i class="fas fa-filter"></i> Screener</a>
+        <a href="sectors.html" class="nav-item"><i class="fas fa-chart-pie"></i> Sectors</a>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-wrapper" style="flex-direction:row;">
+      
+      <!-- Filters Panel -->
+      <div style="width: 300px; border-right: 1px solid var(--border); background: var(--bg-secondary); padding: 24px; overflow-y:auto;">
+        <h3 style="margin-bottom: 24px;">Filters</h3>
+        
+        <div style="margin-bottom: 20px;">
+          <label style="display:block; margin-bottom:8px; color:var(--text-secondary); font-size:12px;">Search Ticker</label>
+          <input type="text" id="filter-search" placeholder="e.g. NVDA" onkeyup="applyFilters()">
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+          <label style="display:block; margin-bottom:8px; color:var(--text-secondary); font-size:12px;">Min Composite Score</label>
+          <input type="range" id="filter-score" min="0" max="100" value="70" onchange="applyFilters()" style="width:100%;">
+        </div>
+        
+        <button class="btn btn-primary" style="width:100%; justify-content:center;" onclick="applyFilters()">Apply Filters</button>
+      </div>
+
+      <!-- Results Area -->
+      <div class="content-area">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+          <h2 id="screener-count">Loading Results...</h2>
+          <button class="btn btn-secondary"><i class="fas fa-download"></i> Export</button>
+        </div>
+
+        <div class="card" style="padding:0;">
+          <table style="margin:0;">
+            <thead>
+              <tr><th>Ticker</th><th>Price</th><th>Sector</th><th>Score</th><th>Pattern</th><th>Volume</th><th>Action</th></tr>
+            </thead>
+            <tbody id="screener-tbody">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+    </div>
+  </div>
+
+  <script src="js/utils.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/screener.js"></script>
+</body>
+</html>

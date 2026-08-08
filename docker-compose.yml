@@ -1,0 +1,45 @@
+# SwingEdge Pro v3 — docker-compose for local development & production
+# Usage: docker-compose up --build
+
+version: '3.9'
+
+services:
+  swingedge:
+    build: .
+    container_name: swingedge-pro
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/swingengine.db
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8000
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data           # persist SQLite DB
+      - ./models:/app/models       # persist ML models
+      - ./frontend:/app/frontend   # hot-reload frontend in dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: Postgres for production-grade DB (Phase 2 of roadmap)
+  # postgres:
+  #   image: postgres:16-alpine
+  #   container_name: swingedge-db
+  #   environment:
+  #     POSTGRES_DB: swingedge
+  #     POSTGRES_USER: swingedge
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+  #   volumes:
+  #     - pgdata:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+# volumes:
+#   pgdata:
