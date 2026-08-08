@@ -53,25 +53,30 @@ def _get_sector():
     return _sector
 
 
+def _sanitize_for_json(obj):
+    """Recursively convert numpy types (bool_, float64, int64) to native Python types for JSON serialization."""
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_for_json(v) for v in obj]
+    if hasattr(obj, 'item'):
+        return obj.item()
+    return obj
+
+
 @router.get('/{ticker}')
 async def get_stock(ticker: str):
     ticker = ticker.upper()
     try:
         # AUDIT FIX P2: single pass — score_stock now does everything internally
-        # (was: 3x get_stock_info, 2x technicals.analyze, separate WallStreet call)
         def _do_score():
             scorer = _get_scorer()
             score = scorer.score_stock(ticker)
-            tech_report = scorer.technicals.analyze(ticker)  # cache hit (already computed in score_stock)
+            tech_report = scorer.technicals.analyze(ticker)  # cache hit
             return score, tech_report
 
         score, tech_report = await asyncio.to_thread(_do_score)
-        info = {'price': score.current_price, 'company_name': score.company_name, 'sector': score.sector}
-        # Use info from score object directly to avoid another get_stock_info call
-        # But we also need the full fundamentals dict — fetch once more (cached in fetchers if implemented)
-        from backend.data.fetchers import get_stock_info as _get_info
-        full_info = _get_info(ticker) or {}
-
+        
         technicals_dict = {
             'rsi': getattr(tech_report, 'rsi', 50.0),
             'rsi_signal': getattr(tech_report, 'rsi_signal', 'neutral'),
@@ -93,10 +98,9 @@ async def get_stock(ticker: str):
             'pattern': getattr(tech_report, 'pattern', 'none'),
         }
 
-        # FIX P0-3: use the wallstreet dict computed inside score_stock (was separate call)
         wallstreet_dict = getattr(score, 'wallstreet', {}) or {}
 
-        return {
+        response_payload = {
             'ticker': ticker,
             'company_name': score.company_name,
             'price': score.current_price,
@@ -114,7 +118,7 @@ async def get_stock(ticker: str):
             'risk_reward': score.risk_reward,
             'swing_timeframe': score.swing_timeframe,
             'pattern': score.pattern,
-            'fundamentals': full_info,
+            'fundamentals': {'price': score.current_price, 'company_name': score.company_name, 'sector': score.sector},
             'technicals': technicals_dict,
             'wallstreet_intelligence': wallstreet_dict,
             'microstructure': getattr(score, 'microstructure', {}),
@@ -122,6 +126,7 @@ async def get_stock(ticker: str):
             'market_regime': getattr(score, 'market_regime', {}),
             'agent_consensus': getattr(score, 'agent_consensus', {}),
         }
+        return _sanitize_for_json(response_payload)
     except Exception as e:
         logger.error(f"Stock score error {ticker}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
