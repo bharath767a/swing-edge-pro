@@ -38,22 +38,19 @@ LEVERAGED_ETF_UNIVERSE: List[Dict] = [
 
     # ═══════════════════════════════════════════════════════════════════════
     # SECTOR EQUITY — medium liquidity, sector-dependent decay
+    # NOTE: FINU, SFZ, TLL removed in v3.2.2 (delisted by ProShares in 2023)
     # ═══════════════════════════════════════════════════════════════════════
     {'ticker': 'ROM', 'direction': 'LONG',  'underlying': 'Technology',        'asset_class': 'sector',     'typical_spread_bps': 8, 'decay_risk_base': 'MEDIUM'},
     {'ticker': 'UXI', 'direction': 'LONG',  'underlying': 'Industrials',       'asset_class': 'sector',     'typical_spread_bps': 10,'decay_risk_base': 'MEDIUM'},
-    {'ticker': 'FINU','direction': 'LONG',  'underlying': 'Financials',        'asset_class': 'sector',     'typical_spread_bps': 15,'decay_risk_base': 'MEDIUM'},
     {'ticker': 'UCC', 'direction': 'LONG',  'underlying': 'Consumer Disc',     'asset_class': 'sector',     'typical_spread_bps': 10,'decay_risk_base': 'MEDIUM'},
     {'ticker': 'UPW', 'direction': 'LONG',  'underlying': 'Utilities',         'asset_class': 'sector',     'typical_spread_bps': 12,'decay_risk_base': 'MEDIUM'},
     {'ticker': 'URE', 'direction': 'LONG',  'underlying': 'Real Estate',       'asset_class': 'sector',     'typical_spread_bps': 12,'decay_risk_base': 'HIGH'},
-    {'ticker': 'LTL', 'direction': 'LONG',  'underlying': 'Telecom',           'asset_class': 'sector',     'typical_spread_bps': 20,'decay_risk_base': 'HIGH'},
     {'ticker': 'BIB', 'direction': 'LONG',  'underlying': 'Nasdaq Biotech',    'asset_class': 'sector',     'typical_spread_bps': 10,'decay_risk_base': 'HIGH'},
     {'ticker': 'REW', 'direction': 'SHORT', 'underlying': 'Technology',        'asset_class': 'sector',     'typical_spread_bps': 12,'decay_risk_base': 'MEDIUM'},
     {'ticker': 'SIJ', 'direction': 'SHORT', 'underlying': 'Industrials',       'asset_class': 'sector',     'typical_spread_bps': 15,'decay_risk_base': 'MEDIUM'},
-    {'ticker': 'SFZ', 'direction': 'SHORT', 'underlying': 'Financials',        'asset_class': 'sector',     'typical_spread_bps': 20,'decay_risk_base': 'MEDIUM'},
     {'ticker': 'SCC', 'direction': 'SHORT', 'underlying': 'Consumer Disc',     'asset_class': 'sector',     'typical_spread_bps': 12,'decay_risk_base': 'MEDIUM'},
     {'ticker': 'SDP', 'direction': 'SHORT', 'underlying': 'Utilities',         'asset_class': 'sector',     'typical_spread_bps': 15,'decay_risk_base': 'MEDIUM'},
     {'ticker': 'SRS', 'direction': 'SHORT', 'underlying': 'Real Estate',       'asset_class': 'sector',     'typical_spread_bps': 15,'decay_risk_base': 'HIGH'},
-    {'ticker': 'TLL', 'direction': 'SHORT', 'underlying': 'Telecom',           'asset_class': 'sector',     'typical_spread_bps': 25,'decay_risk_base': 'HIGH'},
     {'ticker': 'BIS', 'direction': 'SHORT', 'underlying': 'Nasdaq Biotech',    'asset_class': 'sector',     'typical_spread_bps': 12,'decay_risk_base': 'HIGH'},
 
     # ═══════════════════════════════════════════════════════════════════════

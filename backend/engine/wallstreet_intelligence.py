@@ -124,23 +124,46 @@ class WallStreetIntelligenceEngine:
                 break
 
         # 3. Warren Buffett Valuation & Moat Analysis
-        pe = info.get('pe_ratio') or 25.0
+        # FIX v3.2.2: Do NOT fabricate PE/PB/ROE/growth when missing.
+        # Use None and skip the calculation rather than using fake defaults.
+        pe = info.get('pe_ratio')
         forward_pe = info.get('forward_pe') or pe
-        pb = info.get('pb') or info.get('pb_ratio') or 3.0
-        roe = info.get('roe') or 0.20
-        if roe > 5.0:  # If expressed as percentage
+        pb = info.get('pb') or info.get('pb_ratio')
+        roe = info.get('roe')
+        if roe is not None and roe > 5.0:  # If expressed as percentage
             roe = roe / 100.0
 
-        raw_debt = info.get('debt_equity') if info.get('debt_equity') is not None else 40.0
-        # Normalize debt to ratio (e.g. 41.5% -> 0.415)
-        debt_ratio = raw_debt / 100.0 if raw_debt > 3.0 else raw_debt
+        raw_debt = info.get('debt_equity')
+        if raw_debt is not None:
+            debt_ratio = raw_debt / 100.0 if raw_debt > 3.0 else raw_debt
+        else:
+            debt_ratio = None
 
-        # Calculate ROIC estimate & FCF Yield
-        analysis.roic = round(roe * 100, 1)  # Real ROIC percentage
-        analysis.fcf_yield = round((1.0 / max(pe, 1.0)) * 100, 2)
+        # Calculate ROIC estimate & FCF Yield — only if we have real data
+        if roe is not None:
+            analysis.roic = round(roe * 100, 1)
+        else:
+            analysis.roic = None
+        if pe is not None and pe > 0:
+            analysis.fcf_yield = round((1.0 / pe) * 100, 2)
+        else:
+            analysis.fcf_yield = None
 
-        # Buffett Moat Scoring
+        # Buffett Moat Scoring — only if we have the required data
+        # FIX: if data missing, mark as INSUFFICIENT DATA, don't fabricate
         moat_score = 50.0
+        if analysis.roic is None or debt_ratio is None:
+            analysis.economic_moat = 'INSUFFICIENT DATA'
+            analysis.debt_safety = 'INSUFFICIENT DATA'
+            analysis.buffett_score = 50.0  # neutral, not fabricated
+            analysis.thesis = (
+                f"Insufficient fundamental data for moat assessment. "
+                f"Missing: {'ROE' if analysis.roic is None else ''} {'Debt/Equity' if debt_ratio is None else ''}. "
+                f"yfinance may not have this ticker's fundamentals."
+            )
+            analysis.institutional_verdict = 'INSUFFICIENT DATA'
+            return analysis
+
         if analysis.roic > 20 and debt_ratio < 0.6:
             analysis.economic_moat = 'WIDE MOAT'
             moat_score += 30.0
@@ -161,9 +184,9 @@ class WallStreetIntelligenceEngine:
             analysis.debt_safety = 'High Leverage Warning'
             moat_score -= 15.0
 
-        # Growth / Pricing Power multiplier
-        revenue_growth = info.get('revenue_growth') or 0.15
-        if revenue_growth > 0.20:
+        # Growth / Pricing Power multiplier — only if we have real growth data
+        revenue_growth = info.get('revenue_growth')
+        if revenue_growth is not None and revenue_growth > 0.20:
             moat_score += 10.0
 
         analysis.buffett_score = round(max(0.0, min(100.0, moat_score)), 1)
@@ -174,7 +197,9 @@ class WallStreetIntelligenceEngine:
             thesis_parts.append(f"AI Stack Position: {analysis.ai_layer_name}.")
         if analysis.it_layer_name:
             thesis_parts.append(f"IT Industry Position: {analysis.it_layer_name}.")
-        thesis_parts.append(f"Berkshire Moat Assessment: {analysis.economic_moat} with ROIC of {analysis.roic}%.")
+        # FIX: handle None roic gracefully
+        roic_str = f"{analysis.roic}%" if analysis.roic is not None else "N/A"
+        thesis_parts.append(f"Berkshire Moat Assessment: {analysis.economic_moat} with ROIC of {roic_str}.")
         thesis_parts.append(f"Balance Sheet: {analysis.debt_safety}.")
 
         analysis.thesis = " ".join(thesis_parts)

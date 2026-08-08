@@ -137,7 +137,12 @@ class MasterScorer:
 
             # ── Fundamental score (uses already-fetched info) ────────────
             fund_report = self.fundamentals.composite_fundamental_score(ticker, info)
-            result.fundamental_score = fund_report
+            # FIX v3.2.2: fundamentals returns None when data missing — don't fabricate
+            if fund_report is None:
+                result.fundamental_score = 50.0  # neutral in composite, but mark as missing
+                signals.append('Fundamental data unavailable — scoring neutral')
+            else:
+                result.fundamental_score = fund_report
             if info.get('revenue_growth') and info['revenue_growth'] > 0.25:
                 signals.append(f"Revenue growing {info['revenue_growth']*100:.0f}% YoY")
 

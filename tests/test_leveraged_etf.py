@@ -182,10 +182,11 @@ class TestLeveragedETFEngine:
         assert rr >= 2.0
 
     def test_min_liquidity_filter(self):
-        """Engine should refuse ETFs with avg volume < 500K."""
+        """Engine should refuse ETFs with avg volume below threshold."""
         from backend.engine.leveraged_etf import LeveragedETFEngine
         engine = LeveragedETFEngine()
-        assert engine.MIN_AVG_VOLUME == 500_000
+        # FIX v3.2.2: lowered from 500K to 100K (many real 2x ETFs have 100-500K)
+        assert engine.MIN_AVG_VOLUME == 100_000
 
     def test_pattern_detection_for_short_etfs(self):
         """Short ETFs should get inverted pattern labels (VCP on SDS = bearish for S&P)."""

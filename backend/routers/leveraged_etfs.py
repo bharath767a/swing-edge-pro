@@ -65,13 +65,18 @@ def _format_signal(s) -> dict:
 async def screen_leveraged_etfs(
     direction: Optional[str] = Query(None, description='LONG / SHORT / both'),
     asset_class: Optional[str] = Query(None, description='equity / sector / commodity / rates / thematic'),
-    min_score: float = Query(60, ge=0, le=100, description='Minimum composite score'),
+    min_score: float = Query(50, ge=0, le=100, description='Minimum composite score'),
     limit: int = Query(20, le=50, description='Max results'),
 ):
     """Screen the 2x leveraged ETF universe for swing trade candidates.
 
     Returns ranked list with decay risk, regime alignment, entry/stop/target,
     and recommended holding period for each ETF.
+
+    FIX v3.2.2: Lowered default min_score from 60 to 50 (many real candidates
+    score 50-60 in neutral regimes). Also returns regime info + data quality
+    so frontend can show why results may be empty (e.g. regime = sideways
+    means no 2x ETFs are recommended — that's correct, not an error).
     """
     try:
         engine = _get_engine()
@@ -79,13 +84,31 @@ async def screen_leveraged_etfs(
             engine.screen,
             direction, asset_class, min_score, limit
         )
+        # Include regime info so frontend can explain why results may be empty
+        regime_data = engine.regime.evaluate_regime()
         return {
             'count': len(signals),
             'signals': [_format_signal(s) for s in signals],
+            'regime': {
+                'regime': regime_data.get('regime', 'NEUTRAL'),
+                'risk_multiplier': regime_data.get('risk_multiplier', 1.0),
+                'data_quality': regime_data.get('data_quality', 'OK'),
+                'vix_level': regime_data.get('vix_level'),
+            },
+            'note': (
+                'No qualifying ETFs in current regime — this is expected in sideways/volatile markets. '
+                '2x longs need BULLISH regime; 2x shorts need HIGH_VOLATILITY_DEFENSIVE.'
+            ) if len(signals) == 0 else None,
         }
     except Exception as e:
         logger.error(f"Leveraged ETF screen error: {e}", exc_info=True)
-        return {'count': 0, 'signals': [], 'error': str(e)}
+        return {
+            'count': 0,
+            'signals': [],
+            'error': str(e),
+            'error_type': type(e).__name__,
+            'suggestion': 'Check server logs. Most common cause: yfinance rate limiting or network issue.',
+        }
 
 
 @router.get('/long')

@@ -133,13 +133,17 @@ class FundamentalsEngine:
 
         return round(max(0, min(100, score)), 1)
 
-    def composite_fundamental_score(self, ticker: str, info: Optional[Dict] = None) -> float:
-        """Compute weighted fundamental score 0-100."""
+    def composite_fundamental_score(self, ticker: str, info: Optional[Dict] = None) -> Optional[float]:
+        """Compute weighted fundamental score 0-100.
+
+        FIX v3.2.2: Returns None when no data available (was returning 50.0
+        which masked missing data as "neutral"). Caller must handle None.
+        """
         if info is None:
             from backend.data.fetchers import get_stock_info
             info = get_stock_info(ticker)
         if not info:
-            return 50.0
+            return None  # FIX: was 50.0 — don't fabricate neutral score
         val_score = self.score_valuation(info)
         growth_score = self.score_growth(info)
         health_score = self.score_financial_health(info)

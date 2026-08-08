@@ -50,10 +50,16 @@ class InsiderTracker:
                 return weight
         return 1.0
 
-    def score_insider_signal(self, trades: List[Dict]) -> float:
-        """Score insider trades on a 0-100 scale."""
+    def score_insider_signal(self, trades: List[Dict]) -> Optional[float]:
+        """Score insider trades on a 0-100 scale.
+
+        FIX v3.2.2: Returns None when no trades available (was returning 50.0
+        which masked missing data as "neutral"). Caller should handle None.
+        50.0 is still used as the BASE score when trades exist but none are
+        significant — that's a real score, not fabricated.
+        """
         if not trades:
-            return 50.0  # Neutral
+            return None  # FIX: was 50.0 — don't fabricate neutral when no data
 
         score = 50.0
         now = datetime.now()
@@ -144,7 +150,10 @@ class InsiderTracker:
         buy_count = sum(1 for t in trades if t.get('trade_type') == 'P')
         sell_count = sum(1 for t in trades if t.get('trade_type') == 'S')
 
-        if score >= 75:
+        # FIX v3.2.2: handle None score (no trades data)
+        if score is None:
+            summary = "No insider trades data available"
+        elif score >= 75:
             summary = f"Strong insider buying — {buy_count} purchase(s) detected"
         elif score >= 60:
             summary = f"Moderate insider buying — {buy_count} purchase(s)"
@@ -153,11 +162,12 @@ class InsiderTracker:
         else:
             summary = "Neutral insider activity"
 
-        if cluster['detected']:
-            summary = cluster['signal']
+        if cluster.get('detected'):
+            summary = cluster.get('signal', summary)
 
         return {
-            'score': score,
+            'score': score,  # may be None
+            'data_available': score is not None,
             'summary': summary,
             'trades': trades[:10],
             'cluster_buy': cluster,
